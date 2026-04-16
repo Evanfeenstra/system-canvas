@@ -508,12 +508,45 @@ export const userServiceCanvas: CanvasData = {
       height: 55,
       color: '2',
     },
+
+    // File nodes -- source files
+    {
+      id: 'routes-file',
+      type: 'file',
+      file: 'src/routes/mod.rs',
+      x: 0,
+      y: 180,
+      width: 150,
+      height: 40,
+      color: '4',
+    },
+    {
+      id: 'schema-file',
+      type: 'file',
+      file: 'src/db/schema.sql',
+      x: 200,
+      y: 180,
+      width: 150,
+      height: 40,
+      color: '6',
+    },
+    {
+      id: 'config-file',
+      type: 'file',
+      file: 'config/production.toml',
+      x: 400,
+      y: 130,
+      width: 160,
+      height: 40,
+    },
   ],
   edges: [
     { id: 'us-e1', fromNode: 'handler', toNode: 'domain', label: 'calls' },
     { id: 'us-e2', fromNode: 'handler', fromSide: 'bottom', toNode: 'middleware', toSide: 'top' },
     { id: 'us-e3', fromNode: 'domain', fromSide: 'bottom', toNode: 'repo', toSide: 'top', label: 'queries' },
     { id: 'us-e4', fromNode: 'domain', toNode: 'events', label: 'publishes' },
+    { id: 'us-e5', fromNode: 'handler', fromSide: 'bottom', toNode: 'routes-file', toSide: 'top' },
+    { id: 'us-e6', fromNode: 'repo', fromSide: 'bottom', toNode: 'schema-file', toSide: 'top' },
   ],
 }
 

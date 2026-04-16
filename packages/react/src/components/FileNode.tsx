@@ -9,6 +9,13 @@ interface FileNodeProps {
   onContextMenu: (node: ResolvedNode, event: React.MouseEvent) => void
 }
 
+/**
+ * File nodes have a distinct visual style:
+ * - Square corners (rx=2) instead of rounded
+ * - Thinner border (0.75px)
+ * - Dog-ear fold in the top-right corner
+ * - Monospace filename rendering
+ */
 export function FileNode({
   node,
   theme,
@@ -17,12 +24,37 @@ export function FileNode({
   onContextMenu,
 }: FileNodeProps) {
   const { x, y, width, height } = node
-  const cx = x + width / 2
 
   // Display the filename (last segment of path)
   const filePath = node.file ?? ''
   const fileName = filePath.split('/').pop() ?? filePath
+  const dirPath = filePath.includes('/')
+    ? filePath.slice(0, filePath.lastIndexOf('/'))
+    : ''
   const subpath = node.subpath ?? ''
+
+  // Dog-ear size
+  const fold = 10
+
+  // File shape: rectangle with a folded corner (top-right)
+  const shapePath = [
+    `M ${x + 2} ${y}`,              // top-left (slight radius start)
+    `L ${x + width - fold} ${y}`,    // top edge to fold start
+    `L ${x + width} ${y + fold}`,    // diagonal fold
+    `L ${x + width} ${y + height - 2}`, // right edge
+    `Q ${x + width} ${y + height} ${x + width - 2} ${y + height}`, // bottom-right corner
+    `L ${x + 2} ${y + height}`,      // bottom edge
+    `Q ${x} ${y + height} ${x} ${y + height - 2}`, // bottom-left corner
+    `L ${x} ${y + 2}`,              // left edge
+    `Q ${x} ${y} ${x + 2} ${y}`,    // top-left corner
+    'Z',
+  ].join(' ')
+
+  // Fold crease line
+  const foldPath = `M ${x + width - fold} ${y} L ${x + width - fold} ${y + fold} L ${x + width} ${y + fold}`
+
+  const strokeColor = node.resolvedStroke
+  const thinStroke = 0.75
 
   return (
     <g
@@ -33,48 +65,46 @@ export function FileNode({
       onContextMenu={(e) => onContextMenu(node, e)}
     >
       {/* Opaque backer */}
-      <rect
-        x={x}
-        y={y}
-        width={width}
-        height={height}
-        rx={node.resolvedCornerRadius}
-        fill={theme.background}
-      />
+      <path d={shapePath} fill={theme.background} />
       {/* Styled overlay */}
-      <rect
-        x={x}
-        y={y}
-        width={width}
-        height={height}
-        rx={node.resolvedCornerRadius}
+      <path
+        d={shapePath}
         fill={node.resolvedFill}
-        stroke={node.resolvedStroke}
-        strokeWidth={theme.node.strokeWidth}
+        stroke={strokeColor}
+        strokeWidth={thinStroke}
+      />
+      {/* Fold crease */}
+      <path
+        d={foldPath}
+        fill="none"
+        stroke={strokeColor}
+        strokeWidth={thinStroke}
+        opacity={0.5}
       />
 
-      {/* File icon */}
-      <text
-        x={x + 12}
-        y={y + height / 2 + 4}
-        fill={node.resolvedStroke}
-        fontSize={12}
-        fontFamily={theme.node.fontFamily}
-        pointerEvents="none"
-        opacity={0.6}
-      >
-        {'\u{25A1}'}
-      </text>
+      {/* Directory path (small, above filename) */}
+      {dirPath && (
+        <text
+          x={x + 10}
+          y={y + 14}
+          fill={theme.node.sublabelColor}
+          fontSize={theme.node.sublabelFontSize - 1}
+          fontFamily={theme.node.fontFamily}
+          pointerEvents="none"
+          opacity={0.6}
+        >
+          {dirPath}/
+        </text>
+      )}
 
       {/* Filename */}
       <text
-        x={cx}
-        y={y + height / 2 + (subpath ? -2 : 4)}
+        x={x + 10}
+        y={y + (dirPath ? 28 : height / 2 + (subpath ? -2 : 4))}
         fill={theme.node.labelColor}
-        fontSize={theme.node.fontSize}
-        fontWeight={600}
+        fontSize={theme.node.fontSize - 1}
+        fontWeight={500}
         fontFamily={theme.node.fontFamily}
-        textAnchor="middle"
         pointerEvents="none"
       >
         {fileName}
@@ -83,12 +113,11 @@ export function FileNode({
       {/* Subpath */}
       {subpath && (
         <text
-          x={cx}
-          y={y + height / 2 + theme.node.fontSize + 2}
+          x={x + 10}
+          y={y + (dirPath ? 40 : height / 2 + theme.node.fontSize + 2)}
           fill={theme.node.sublabelColor}
           fontSize={theme.node.sublabelFontSize}
           fontFamily={theme.node.fontFamily}
-          textAnchor="middle"
           pointerEvents="none"
         >
           {subpath}
