@@ -3,12 +3,23 @@ import { resolveNode } from './themes/resolve.js'
 
 /**
  * Resolve all nodes in a canvas, applying category defaults and color resolution.
+ *
+ * If the canvas includes a `theme` hint with inline categories, those are
+ * merged into the active theme before resolving nodes.
  */
 export function resolveCanvas(
   canvas: CanvasData,
   theme: CanvasTheme
 ): { nodes: ResolvedNode[]; edges: CanvasEdge[] } {
-  const nodes = (canvas.nodes ?? []).map((n) => resolveNode(n, theme))
+  // Merge canvas-level categories into the theme
+  const effectiveTheme = canvas.theme?.categories
+    ? {
+        ...theme,
+        categories: { ...theme.categories, ...canvas.theme.categories },
+      }
+    : theme
+
+  const nodes = (canvas.nodes ?? []).map((n) => resolveNode(n, effectiveTheme))
   const edges = canvas.edges ?? []
   return { nodes, edges }
 }

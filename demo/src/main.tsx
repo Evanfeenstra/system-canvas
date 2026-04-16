@@ -2,7 +2,6 @@ import React, { useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { SystemCanvas } from 'system-canvas-react'
 import {
-  themes,
   darkTheme,
   midnightTheme,
   lightTheme,
@@ -18,38 +17,6 @@ const allThemes: Record<string, CanvasTheme> = {
   light: lightTheme,
   blueprint: blueprintTheme,
   warm: warmTheme,
-}
-
-// Add categories to all themes for the demo
-const categoryDefs = {
-  service: {
-    defaultWidth: 140,
-    defaultHeight: 60,
-    fill: 'rgba(6, 78, 59, 0.4)',
-    stroke: '#34d399',
-    cornerRadius: 6,
-    icon: 'server',
-  },
-  database: {
-    defaultWidth: 140,
-    defaultHeight: 60,
-    fill: 'rgba(76, 29, 149, 0.4)',
-    stroke: '#a78bfa',
-    cornerRadius: 6,
-    icon: 'database',
-  },
-  frontend: {
-    defaultWidth: 140,
-    defaultHeight: 60,
-    fill: 'rgba(8, 51, 68, 0.4)',
-    stroke: '#22d3ee',
-    cornerRadius: 6,
-    icon: 'globe',
-  },
-}
-
-for (const t of Object.values(allThemes)) {
-  t.categories = { ...t.categories, ...categoryDefs }
 }
 
 function App() {

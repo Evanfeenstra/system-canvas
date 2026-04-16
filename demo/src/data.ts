@@ -5,20 +5,49 @@ import type { CanvasData } from 'system-canvas'
  * Some nodes have `ref` pointing to sub-canvases.
  */
 export const rootCanvas: CanvasData = {
+  theme: {
+    base: 'dark',
+    categories: {
+      service: {
+        defaultWidth: 140,
+        defaultHeight: 60,
+        fill: 'rgba(6, 78, 59, 0.4)',
+        stroke: '#34d399',
+        cornerRadius: 6,
+        icon: 'server',
+      },
+      database: {
+        defaultWidth: 140,
+        defaultHeight: 60,
+        fill: 'rgba(76, 29, 149, 0.4)',
+        stroke: '#a78bfa',
+        cornerRadius: 6,
+        icon: 'database',
+      },
+      frontend: {
+        defaultWidth: 140,
+        defaultHeight: 60,
+        fill: 'rgba(8, 51, 68, 0.4)',
+        stroke: '#22d3ee',
+        cornerRadius: 6,
+        icon: 'globe',
+      },
+    },
+  },
   nodes: [
     // Group: Engineering
     {
       id: 'eng-group',
       type: 'group',
-      x: -20,
-      y: -20,
-      width: 560,
-      height: 320,
+      x: -30,
+      y: -30,
+      width: 590,
+      height: 330,
       label: 'Engineering',
       color: '5',
     },
 
-    // Services
+    // Services (top row: y=20)
     {
       id: 'api-gateway',
       type: 'text',
@@ -55,13 +84,13 @@ export const rootCanvas: CanvasData = {
       category: 'service',
     },
 
-    // Databases
+    // Databases (middle row: y=120)
     {
       id: 'postgres',
       type: 'text',
       text: 'PostgreSQL\nPrimary',
-      x: 100,
-      y: 140,
+      x: 80,
+      y: 120,
       width: 140,
       height: 60,
       color: '6',
@@ -71,21 +100,21 @@ export const rootCanvas: CanvasData = {
       id: 'redis',
       type: 'text',
       text: 'Redis\nCache + Sessions',
-      x: 320,
-      y: 140,
+      x: 300,
+      y: 120,
       width: 140,
       height: 60,
       color: '2',
       category: 'database',
     },
 
-    // Message bus
+    // Message bus (bottom row: y=220)
     {
       id: 'kafka',
       type: 'text',
       text: 'Kafka',
       x: 180,
-      y: 240,
+      y: 220,
       width: 160,
       height: 30,
       color: '2',
@@ -96,21 +125,21 @@ export const rootCanvas: CanvasData = {
       id: 'infra-group',
       type: 'group',
       x: 600,
-      y: -20,
-      width: 300,
-      height: 320,
+      y: -30,
+      width: 210,
+      height: 400,
       label: 'Infrastructure',
       color: '3',
     },
 
-    // Infra nodes
+    // Infra nodes (stacked vertically)
     {
       id: 'k8s',
       type: 'text',
       text: 'Kubernetes\nEKS Cluster',
       x: 620,
-      y: 30,
-      width: 140,
+      y: 20,
+      width: 170,
       height: 60,
       color: '5',
       ref: 'canvas:k8s',
@@ -120,8 +149,8 @@ export const rootCanvas: CanvasData = {
       type: 'text',
       text: 'Monitoring\nPrometheus + Grafana',
       x: 620,
-      y: 120,
-      width: 160,
+      y: 110,
+      width: 170,
       height: 60,
       color: '3',
     },
@@ -130,33 +159,31 @@ export const rootCanvas: CanvasData = {
       type: 'text',
       text: 'CI/CD\nGitHub Actions',
       x: 620,
-      y: 210,
-      width: 140,
+      y: 200,
+      width: 170,
       height: 60,
       color: '3',
     },
-
-    // External
-    {
-      id: 'clients',
-      type: 'text',
-      text: 'Clients\nWeb + Mobile',
-      x: -220,
-      y: 20,
-      width: 140,
-      height: 60,
-      category: 'frontend',
-    },
-
-    // Team node
     {
       id: 'platform-team',
       type: 'text',
       text: 'Platform Team\n4 Engineers',
       x: 620,
-      y: 300,
-      width: 160,
+      y: 290,
+      width: 170,
       height: 50,
+    },
+
+    // External (outside both groups)
+    {
+      id: 'clients',
+      type: 'text',
+      text: 'Clients\nWeb + Mobile',
+      x: -230,
+      y: 20,
+      width: 140,
+      height: 60,
+      category: 'frontend',
     },
   ],
 

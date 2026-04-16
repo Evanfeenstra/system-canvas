@@ -65,10 +65,24 @@ export interface CanvasEdge {
   style?: EdgeStyle
 }
 
+/**
+ * Canvas-level theme hint. Allows a canvas document to declare
+ * a base theme and inline category definitions so that LLM-generated
+ * canvases are fully self-describing.
+ */
+export interface CanvasThemeHint {
+  /** Name of a built-in base theme: "dark", "midnight", "light", "blueprint", "warm" */
+  base?: string
+  /** Inline category definitions, merged into the active theme's categories */
+  categories?: Record<string, CategoryDefinition>
+}
+
 /** A JSON Canvas document (with system-canvas extensions). */
 export interface CanvasData {
   nodes?: CanvasNode[]
   edges?: CanvasEdge[]
+  /** Optional theme hint — lets the document declare categories and a preferred base theme */
+  theme?: CanvasThemeHint
 }
 
 // ---------------------------------------------------------------------------

@@ -14,6 +14,7 @@ import {
   resolveCanvas,
   buildNodeMap,
   darkTheme,
+  themes,
 } from 'system-canvas'
 import { useNavigation } from '../hooks/useNavigation.js'
 import { useCanvasInteraction } from '../hooks/useCanvasInteraction.js'
@@ -78,14 +79,22 @@ export function SystemCanvas({
   className,
   style,
 }: SystemCanvasProps) {
-  // Resolve theme
+  // Resolve theme: prop theme > canvas-level base hint > darkTheme
   const theme = useMemo(() => {
-    if (!themeProp) return darkTheme
-    if ('name' in themeProp && 'background' in themeProp && 'grid' in themeProp) {
-      return themeProp as CanvasTheme
+    let base: CanvasTheme
+    if (themeProp) {
+      if ('name' in themeProp && 'background' in themeProp && 'grid' in themeProp) {
+        base = themeProp as CanvasTheme
+      } else {
+        base = resolveTheme(themeProp as Partial<CanvasTheme>)
+      }
+    } else if (canvas.theme?.base && canvas.theme.base in themes) {
+      base = themes[canvas.theme.base as keyof typeof themes]
+    } else {
+      base = darkTheme
     }
-    return resolveTheme(themeProp as Partial<CanvasTheme>)
-  }, [themeProp])
+    return base
+  }, [themeProp, canvas.theme?.base])
 
   // Navigation state
   const {

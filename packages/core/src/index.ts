@@ -9,6 +9,7 @@ export type {
   CanvasNode,
   CanvasEdge,
   CanvasData,
+  CanvasThemeHint,
   CategoryDefinition,
   PresetColor,
   GridConfig,
