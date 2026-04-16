@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react'
+import React, { useMemo, useRef, useCallback } from 'react'
 import type {
   CanvasData,
   CanvasNode,
@@ -7,7 +7,7 @@ import type {
   EdgeStyle,
   ViewportState,
   ContextMenuEvent,
-  BreadcrumbEntry,
+  ResolvedNode,
 } from 'system-canvas'
 import {
   resolveTheme,
@@ -18,7 +18,7 @@ import {
 } from 'system-canvas'
 import { useNavigation } from '../hooks/useNavigation.js'
 import { useCanvasInteraction } from '../hooks/useCanvasInteraction.js'
-import { Viewport } from './Viewport.js'
+import { Viewport, type ViewportHandle } from './Viewport.js'
 import { Breadcrumbs } from './Breadcrumbs.js'
 
 export interface SystemCanvasProps {
@@ -118,9 +118,25 @@ export function SystemCanvas({
     return { nodes: resolved.nodes, edges: resolved.edges, nodeMap: map }
   }, [currentCanvas, theme])
 
-  // Viewport ref for coordinate conversion
-  const viewportRef = React.useRef<ViewportState>(
+  // Viewport refs
+  const viewportStateRef = useRef<ViewportState>(
     defaultViewport ?? { x: 0, y: 0, zoom: 1 }
+  )
+  const viewportHandleRef = useRef<ViewportHandle>(null)
+
+  // Zoom-then-navigate: animate toward the node, then swap canvas
+  const handleNavigableNodeClick = useCallback(
+    (node: ResolvedNode) => {
+      const handle = viewportHandleRef.current
+      if (handle) {
+        handle.zoomToNode(node, () => {
+          navigateToRef(node)
+        })
+      } else {
+        navigateToRef(node)
+      }
+    },
+    [navigateToRef]
   )
 
   // Interaction handlers
@@ -136,8 +152,8 @@ export function SystemCanvas({
     onNodeDoubleClick,
     onEdgeClick,
     onContextMenu,
-    onNavigableNodeClick: (node) => navigateToRef(node),
-    viewport: viewportRef,
+    onNavigableNodeClick: handleNavigableNodeClick,
+    viewport: viewportStateRef,
   })
 
   return (
@@ -182,6 +198,7 @@ export function SystemCanvas({
 
       {/* SVG viewport */}
       <Viewport
+        ref={viewportHandleRef}
         nodes={nodes}
         edges={edges}
         nodeMap={nodeMap}
@@ -191,7 +208,7 @@ export function SystemCanvas({
         maxZoom={maxZoom}
         defaultViewport={defaultViewport}
         onViewportChange={(vp) => {
-          viewportRef.current = vp
+          viewportStateRef.current = vp
           onViewportChange?.(vp)
         }}
         onNodeClick={handleNodeClick}

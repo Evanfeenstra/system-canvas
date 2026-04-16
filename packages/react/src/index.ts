@@ -3,7 +3,7 @@ export { SystemCanvas } from './components/SystemCanvas.js'
 export type { SystemCanvasProps } from './components/SystemCanvas.js'
 
 // Individual components (for custom composition)
-export { Viewport } from './components/Viewport.js'
+export { Viewport, type ViewportHandle } from './components/Viewport.js'
 export { NodeRenderer } from './components/NodeRenderer.js'
 export { EdgeRenderer } from './components/EdgeRenderer.js'
 export { Breadcrumbs } from './components/Breadcrumbs.js'

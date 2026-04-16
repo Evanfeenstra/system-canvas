@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { zoom, zoomIdentity, type ZoomBehavior } from 'd3-zoom'
 import { select } from 'd3-selection'
+import 'd3-transition' // Extends d3-selection with .transition()
 import type { ViewportState, ResolvedNode } from 'system-canvas'
 import { fitToBounds } from 'system-canvas'
 
@@ -15,8 +16,10 @@ interface UseViewportResult {
   svgRef: React.RefObject<SVGSVGElement | null>
   groupRef: React.RefObject<SVGGElement | null>
   viewport: React.RefObject<ViewportState>
-  fitToContent: (nodes: ResolvedNode[]) => void
+  fitToContent: (nodes: ResolvedNode[], animate?: boolean) => void
   resetZoom: () => void
+  /** Animate zoom to center on a node, then call onComplete */
+  zoomToNode: (node: ResolvedNode, onComplete?: () => void) => void
 }
 
 export function useViewport(options: UseViewportOptions): UseViewportResult {
@@ -66,7 +69,7 @@ export function useViewport(options: UseViewportOptions): UseViewportResult {
     }
   }, [minZoom, maxZoom]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const fitToContent = useCallback((nodes: ResolvedNode[]) => {
+  const fitToContent = useCallback((nodes: ResolvedNode[], animate = true) => {
     const svg = svgRef.current
     if (!svg || !zoomBehaviorRef.current || nodes.length === 0) return
 
@@ -77,16 +80,60 @@ export function useViewport(options: UseViewportOptions): UseViewportResult {
       .translate(target.x, target.y)
       .scale(target.zoom)
 
-    // Apply transform directly (no d3-transition dependency)
-    select(svg).call(zoomBehaviorRef.current.transform, t)
+    if (animate) {
+      select(svg)
+        .transition()
+        .duration(400)
+        .call(zoomBehaviorRef.current.transform as any, t)
+    } else {
+      select(svg).call(zoomBehaviorRef.current.transform, t)
+    }
   }, [])
 
   const resetZoom = useCallback(() => {
     const svg = svgRef.current
     if (!svg || !zoomBehaviorRef.current) return
 
-    select(svg).call(zoomBehaviorRef.current.transform, zoomIdentity)
+    select(svg)
+      .transition()
+      .duration(400)
+      .call(zoomBehaviorRef.current.transform as any, zoomIdentity)
   }, [])
 
-  return { svgRef, groupRef, viewport, fitToContent, resetZoom }
+  const zoomToNode = useCallback(
+    (node: ResolvedNode, onComplete?: () => void) => {
+      const svg = svgRef.current
+      if (!svg || !zoomBehaviorRef.current) {
+        onComplete?.()
+        return
+      }
+
+      const rect = svg.getBoundingClientRect()
+
+      // Compute a transform that centers the node and zooms in
+      const nodeCx = node.x + node.width / 2
+      const nodeCy = node.y + node.height / 2
+
+      // Zoom level: fit the node with generous padding, but cap at 2x
+      const padding = 100
+      const scaleX = rect.width / (node.width + padding * 2)
+      const scaleY = rect.height / (node.height + padding * 2)
+      const targetZoom = Math.min(scaleX, scaleY, 2)
+
+      const t = zoomIdentity
+        .translate(rect.width / 2 - nodeCx * targetZoom, rect.height / 2 - nodeCy * targetZoom)
+        .scale(targetZoom)
+
+      select(svg)
+        .transition()
+        .duration(500)
+        .call(zoomBehaviorRef.current.transform as any, t)
+        .on('end', () => {
+          onComplete?.()
+        })
+    },
+    []
+  )
+
+  return { svgRef, groupRef, viewport, fitToContent, resetZoom, zoomToNode }
 }
