@@ -11,6 +11,7 @@ export { TextNode } from './components/TextNode.js'
 export { FileNode } from './components/FileNode.js'
 export { LinkNode } from './components/LinkNode.js'
 export { GroupNode } from './components/GroupNode.js'
+export { NodeIcon } from './components/NodeIcon.js'
 
 // Hooks
 export { useViewport } from './hooks/useViewport.js'

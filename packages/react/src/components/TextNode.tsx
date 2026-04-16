@@ -1,5 +1,6 @@
 import React from 'react'
 import type { ResolvedNode, CanvasTheme } from 'system-canvas'
+import { NodeIcon } from './NodeIcon.js'
 
 interface TextNodeProps {
   node: ResolvedNode
@@ -101,17 +102,14 @@ export function TextNode({
 
       {/* Category icon */}
       {node.resolvedIcon && (
-        <text
-          x={x + 12}
-          y={y + height / 2 + 4}
-          fill={node.resolvedStroke}
-          fontSize={14}
-          fontFamily={theme.node.fontFamily}
-          pointerEvents="none"
+        <NodeIcon
+          icon={node.resolvedIcon}
+          x={x + 8}
+          y={y + height / 2 - 7}
+          size={14}
+          color={node.resolvedStroke}
           opacity={0.7}
-        >
-          {getIconGlyph(node.resolvedIcon)}
-        </text>
+        />
       )}
     </g>
   )
@@ -190,17 +188,4 @@ function RefIndicator({
   }
 }
 
-/** Map icon identifiers to simple glyphs/characters. */
-function getIconGlyph(icon: string): string {
-  const glyphs: Record<string, string> = {
-    database: '\u{1F4BE}', // floppy disk / storage
-    server: '\u{25A3}',    // square with fill
-    person: '\u{25CB}',    // circle
-    cloud: '\u{2601}',     // cloud
-    lock: '\u{1F512}',     // lock
-    globe: '\u{25CE}',     // bullseye
-    code: '</>',
-    folder: '\u{25A1}',    // square
-  }
-  return glyphs[icon] ?? ''
-}
+
