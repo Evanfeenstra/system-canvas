@@ -1,0 +1,154 @@
+import type {
+  CanvasEdge,
+  ResolvedNode,
+  EdgeStyle,
+  AnchorPoint,
+} from '../types.js'
+import { computeAnchorPoint, inferSide } from './anchor-points.js'
+
+/**
+ * Compute the SVG path `d` attribute for an edge between two nodes.
+ */
+export function computeEdgePath(
+  edge: CanvasEdge,
+  fromNode: ResolvedNode,
+  toNode: ResolvedNode,
+  style: EdgeStyle = 'bezier'
+): string {
+  // Determine connection sides
+  const inferred = inferSide(fromNode, toNode)
+  const fromSide = edge.fromSide ?? inferred.fromSide
+  const toSide = edge.toSide ?? inferred.toSide
+
+  const from = computeAnchorPoint(fromNode, fromSide)
+  const to = computeAnchorPoint(toNode, toSide)
+
+  const effectiveStyle = edge.style ?? style
+
+  switch (effectiveStyle) {
+    case 'straight':
+      return computeStraightPath(from, to)
+    case 'orthogonal':
+      return computeOrthogonalPath(from, to, fromSide, toSide)
+    case 'bezier':
+    default:
+      return computeBezierPath(from, to, fromSide, toSide)
+  }
+}
+
+/** Straight line between two points. */
+function computeStraightPath(from: AnchorPoint, to: AnchorPoint): string {
+  return `M ${from.x} ${from.y} L ${to.x} ${to.y}`
+}
+
+/**
+ * Cubic bezier curve with control points offset along the connection sides.
+ * Uses a tightness factor of 0.75 (matching the Obsidian reference).
+ */
+function computeBezierPath(
+  from: AnchorPoint,
+  to: AnchorPoint,
+  fromSide: string,
+  toSide: string
+): string {
+  const dist = Math.sqrt((to.x - from.x) ** 2 + (to.y - from.y) ** 2)
+  const offset = Math.max(50, dist * 0.4)
+
+  const cp1 = controlPointOffset(from, fromSide, offset)
+  const cp2 = controlPointOffset(to, toSide, offset)
+
+  return `M ${from.x} ${from.y} C ${cp1.x} ${cp1.y}, ${cp2.x} ${cp2.y}, ${to.x} ${to.y}`
+}
+
+/**
+ * Orthogonal (right-angle) path routing.
+ * Creates an L-shaped or Z-shaped path depending on relative positions.
+ */
+function computeOrthogonalPath(
+  from: AnchorPoint,
+  to: AnchorPoint,
+  fromSide: string,
+  toSide: string
+): string {
+  const midX = (from.x + to.x) / 2
+  const midY = (from.y + to.y) / 2
+
+  // Determine routing based on the sides involved
+  const isFromHorizontal = fromSide === 'left' || fromSide === 'right'
+  const isToHorizontal = toSide === 'left' || toSide === 'right'
+
+  if (isFromHorizontal && isToHorizontal) {
+    // Both horizontal: route through midX
+    return `M ${from.x} ${from.y} L ${midX} ${from.y} L ${midX} ${to.y} L ${to.x} ${to.y}`
+  } else if (!isFromHorizontal && !isToHorizontal) {
+    // Both vertical: route through midY
+    return `M ${from.x} ${from.y} L ${from.x} ${midY} L ${to.x} ${midY} L ${to.x} ${to.y}`
+  } else if (isFromHorizontal && !isToHorizontal) {
+    // From horizontal, to vertical: L-shape
+    return `M ${from.x} ${from.y} L ${to.x} ${from.y} L ${to.x} ${to.y}`
+  } else {
+    // From vertical, to horizontal: L-shape
+    return `M ${from.x} ${from.y} L ${from.x} ${to.y} L ${to.x} ${to.y}`
+  }
+}
+
+/**
+ * Offset a point along the direction of a side for bezier control points.
+ */
+function controlPointOffset(
+  point: AnchorPoint,
+  side: string,
+  offset: number
+): AnchorPoint {
+  switch (side) {
+    case 'top':
+      return { x: point.x, y: point.y - offset }
+    case 'bottom':
+      return { x: point.x, y: point.y + offset }
+    case 'left':
+      return { x: point.x - offset, y: point.y }
+    case 'right':
+      return { x: point.x + offset, y: point.y }
+    default:
+      return point
+  }
+}
+
+/**
+ * Compute the midpoint of an edge path (for label placement).
+ */
+export function computeEdgeMidpoint(
+  edge: CanvasEdge,
+  fromNode: ResolvedNode,
+  toNode: ResolvedNode
+): AnchorPoint {
+  const inferred = inferSide(fromNode, toNode)
+  const fromSide = edge.fromSide ?? inferred.fromSide
+  const toSide = edge.toSide ?? inferred.toSide
+
+  const from = computeAnchorPoint(fromNode, fromSide)
+  const to = computeAnchorPoint(toNode, toSide)
+
+  // For the midpoint, we use the bezier curve midpoint (t=0.5)
+  const dist = Math.sqrt((to.x - from.x) ** 2 + (to.y - from.y) ** 2)
+  const offset = Math.max(50, dist * 0.4)
+
+  const cp1 = controlPointOffset(from, fromSide, offset)
+  const cp2 = controlPointOffset(to, toSide, offset)
+
+  // Cubic bezier at t=0.5
+  const t = 0.5
+  const mt = 1 - t
+  const x =
+    mt * mt * mt * from.x +
+    3 * mt * mt * t * cp1.x +
+    3 * mt * t * t * cp2.x +
+    t * t * t * to.x
+  const y =
+    mt * mt * mt * from.y +
+    3 * mt * mt * t * cp1.y +
+    3 * mt * t * t * cp2.y +
+    t * t * t * to.y
+
+  return { x, y }
+}

@@ -1,0 +1,71 @@
+import type { CanvasTheme } from '../types.js'
+
+/**
+ * Midnight theme — deeper blacks, higher contrast, neon accents.
+ * Terminal/hacker aesthetic.
+ */
+export const midnightTheme: CanvasTheme = {
+  name: 'midnight',
+
+  background: '#000000',
+
+  grid: {
+    size: 32,
+    color: '#111111',
+    strokeWidth: 0.3,
+  },
+
+  node: {
+    fill: 'rgba(10, 10, 10, 0.8)',
+    stroke: '#6b7280',               // gray-500
+    strokeWidth: 1,
+    cornerRadius: 4,
+    labelColor: '#e5e7eb',           // gray-200
+    sublabelColor: '#6b7280',        // gray-500
+    fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+    fontSize: 11,
+    sublabelFontSize: 8,
+    refIndicator: {
+      icon: 'arrow',
+      color: 'rgba(107, 114, 128, 0.5)',
+    },
+  },
+
+  edge: {
+    stroke: '#374151',      // gray-700
+    strokeWidth: 1,
+    arrowSize: 8,
+    labelColor: '#6b7280',  // gray-500
+    labelFontSize: 8,
+  },
+
+  group: {
+    fill: 'rgba(17, 17, 17, 0.4)',
+    stroke: '#374151',
+    strokeWidth: 1,
+    strokeDasharray: '6,3',
+    labelColor: '#6b7280',
+    labelFontSize: 10,
+    cornerRadius: 8,
+  },
+
+  breadcrumbs: {
+    background: 'rgba(0, 0, 0, 0.95)',
+    textColor: '#6b7280',
+    activeColor: '#00ff88',
+    separatorColor: '#374151',
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: 11,
+  },
+
+  presetColors: {
+    '1': { fill: 'rgba(255, 0, 60, 0.15)',   stroke: '#ff003c' },  // neon red
+    '2': { fill: 'rgba(255, 140, 0, 0.15)',  stroke: '#ff8c00' },  // neon orange
+    '3': { fill: 'rgba(255, 230, 0, 0.15)',  stroke: '#ffe600' },  // neon yellow
+    '4': { fill: 'rgba(0, 255, 136, 0.15)',  stroke: '#00ff88' },  // neon green
+    '5': { fill: 'rgba(0, 200, 255, 0.15)',  stroke: '#00c8ff' },  // neon cyan
+    '6': { fill: 'rgba(160, 0, 255, 0.15)',  stroke: '#a000ff' },  // neon purple
+  },
+
+  categories: {},
+}

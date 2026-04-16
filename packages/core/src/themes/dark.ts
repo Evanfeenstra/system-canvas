@@ -1,0 +1,71 @@
+import type { CanvasTheme } from '../types.js'
+
+/**
+ * Default dark theme — inspired by the architecture diagram reference.
+ * Slate-950 background, glowing colored nodes, grid pattern, JetBrains Mono.
+ */
+export const darkTheme: CanvasTheme = {
+  name: 'dark',
+
+  background: '#020617', // slate-950
+
+  grid: {
+    size: 40,
+    color: '#1e293b', // slate-800
+    strokeWidth: 0.5,
+  },
+
+  node: {
+    fill: 'rgba(30, 41, 59, 0.5)',    // slate default
+    stroke: '#94a3b8',                  // slate-400
+    strokeWidth: 1.5,
+    cornerRadius: 6,
+    labelColor: '#ffffff',
+    sublabelColor: '#94a3b8',           // slate-400
+    fontFamily: "'JetBrains Mono', 'Fira Code', 'SF Mono', monospace",
+    fontSize: 12,
+    sublabelFontSize: 9,
+    refIndicator: {
+      icon: 'chevron',
+      color: 'rgba(148, 163, 184, 0.6)', // slate-400 at 60%
+    },
+  },
+
+  edge: {
+    stroke: '#64748b',    // slate-500
+    strokeWidth: 1.5,
+    arrowSize: 10,
+    labelColor: '#94a3b8', // slate-400
+    labelFontSize: 9,
+  },
+
+  group: {
+    fill: 'rgba(30, 41, 59, 0.15)',
+    stroke: '#475569',      // slate-600
+    strokeWidth: 1,
+    strokeDasharray: '8,4',
+    labelColor: '#94a3b8',  // slate-400
+    labelFontSize: 11,
+    cornerRadius: 12,
+  },
+
+  breadcrumbs: {
+    background: 'rgba(15, 23, 42, 0.9)', // slate-900 at 90%
+    textColor: '#94a3b8',
+    activeColor: '#e2e8f0',               // slate-200
+    separatorColor: '#475569',            // slate-600
+    fontFamily: "'JetBrains Mono', 'Fira Code', 'SF Mono', monospace",
+    fontSize: 12,
+  },
+
+  presetColors: {
+    '1': { fill: 'rgba(136, 19, 55, 0.4)',   stroke: '#fb7185' },  // rose — security/auth
+    '2': { fill: 'rgba(120, 53, 15, 0.3)',   stroke: '#fb923c' },  // orange — events/messaging
+    '3': { fill: 'rgba(120, 53, 15, 0.3)',   stroke: '#fbbf24' },  // amber — cloud/infra
+    '4': { fill: 'rgba(6, 78, 59, 0.4)',     stroke: '#34d399' },  // emerald — backend/services
+    '5': { fill: 'rgba(8, 51, 68, 0.4)',     stroke: '#22d3ee' },  // cyan — frontend/client
+    '6': { fill: 'rgba(76, 29, 149, 0.4)',   stroke: '#a78bfa' },  // violet — database/storage
+  },
+
+  categories: {},
+}

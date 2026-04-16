@@ -1,0 +1,500 @@
+import type { CanvasData } from 'system-canvas'
+
+/**
+ * Root canvas: an organization-level system diagram.
+ * Some nodes have `ref` pointing to sub-canvases.
+ */
+export const rootCanvas: CanvasData = {
+  nodes: [
+    // Group: Engineering
+    {
+      id: 'eng-group',
+      type: 'group',
+      x: -20,
+      y: -20,
+      width: 560,
+      height: 320,
+      label: 'Engineering',
+      color: '5',
+    },
+
+    // Services
+    {
+      id: 'api-gateway',
+      type: 'text',
+      text: 'API Gateway\nNginx + Kong',
+      x: 0,
+      y: 20,
+      width: 140,
+      height: 60,
+      color: '4',
+      ref: 'canvas:api-gateway',
+      category: 'service',
+    },
+    {
+      id: 'auth-service',
+      type: 'text',
+      text: 'Auth Service\nOAuth2 / JWT',
+      x: 200,
+      y: 20,
+      width: 140,
+      height: 60,
+      color: '1',
+      category: 'service',
+    },
+    {
+      id: 'user-service',
+      type: 'text',
+      text: 'User Service\nRust / Axum',
+      x: 400,
+      y: 20,
+      width: 140,
+      height: 60,
+      color: '4',
+      ref: 'canvas:user-service',
+      category: 'service',
+    },
+
+    // Databases
+    {
+      id: 'postgres',
+      type: 'text',
+      text: 'PostgreSQL\nPrimary',
+      x: 100,
+      y: 140,
+      width: 140,
+      height: 60,
+      color: '6',
+      category: 'database',
+    },
+    {
+      id: 'redis',
+      type: 'text',
+      text: 'Redis\nCache + Sessions',
+      x: 320,
+      y: 140,
+      width: 140,
+      height: 60,
+      color: '2',
+      category: 'database',
+    },
+
+    // Message bus
+    {
+      id: 'kafka',
+      type: 'text',
+      text: 'Kafka',
+      x: 180,
+      y: 240,
+      width: 160,
+      height: 30,
+      color: '2',
+    },
+
+    // Group: Infrastructure
+    {
+      id: 'infra-group',
+      type: 'group',
+      x: 600,
+      y: -20,
+      width: 300,
+      height: 320,
+      label: 'Infrastructure',
+      color: '3',
+    },
+
+    // Infra nodes
+    {
+      id: 'k8s',
+      type: 'text',
+      text: 'Kubernetes\nEKS Cluster',
+      x: 620,
+      y: 30,
+      width: 140,
+      height: 60,
+      color: '5',
+      ref: 'canvas:k8s',
+    },
+    {
+      id: 'monitoring',
+      type: 'text',
+      text: 'Monitoring\nPrometheus + Grafana',
+      x: 620,
+      y: 120,
+      width: 160,
+      height: 60,
+      color: '3',
+    },
+    {
+      id: 'ci-cd',
+      type: 'text',
+      text: 'CI/CD\nGitHub Actions',
+      x: 620,
+      y: 210,
+      width: 140,
+      height: 60,
+      color: '3',
+    },
+
+    // External
+    {
+      id: 'clients',
+      type: 'text',
+      text: 'Clients\nWeb + Mobile',
+      x: -220,
+      y: 20,
+      width: 140,
+      height: 60,
+      category: 'frontend',
+    },
+
+    // Team node
+    {
+      id: 'platform-team',
+      type: 'text',
+      text: 'Platform Team\n4 Engineers',
+      x: 620,
+      y: 300,
+      width: 160,
+      height: 50,
+    },
+  ],
+
+  edges: [
+    {
+      id: 'e1',
+      fromNode: 'clients',
+      fromSide: 'right',
+      toNode: 'api-gateway',
+      toSide: 'left',
+      label: 'HTTPS',
+    },
+    {
+      id: 'e2',
+      fromNode: 'api-gateway',
+      fromSide: 'right',
+      toNode: 'auth-service',
+      toSide: 'left',
+      label: 'Auth',
+    },
+    {
+      id: 'e3',
+      fromNode: 'api-gateway',
+      toNode: 'user-service',
+      label: 'gRPC',
+    },
+    {
+      id: 'e4',
+      fromNode: 'auth-service',
+      fromSide: 'bottom',
+      toNode: 'redis',
+      toSide: 'top',
+      label: 'Sessions',
+    },
+    {
+      id: 'e5',
+      fromNode: 'user-service',
+      fromSide: 'bottom',
+      toNode: 'postgres',
+      toSide: 'right',
+    },
+    {
+      id: 'e6',
+      fromNode: 'user-service',
+      fromSide: 'bottom',
+      toNode: 'redis',
+      toSide: 'right',
+    },
+    {
+      id: 'e7',
+      fromNode: 'api-gateway',
+      fromSide: 'bottom',
+      toNode: 'postgres',
+      toSide: 'top',
+    },
+    {
+      id: 'e8',
+      fromNode: 'postgres',
+      fromSide: 'bottom',
+      toNode: 'kafka',
+      toSide: 'left',
+      label: 'CDC',
+    },
+    {
+      id: 'e9',
+      fromNode: 'k8s',
+      fromSide: 'left',
+      toNode: 'user-service',
+      toSide: 'right',
+      label: 'deploys',
+      color: '5',
+    },
+    {
+      id: 'e10',
+      fromNode: 'ci-cd',
+      fromSide: 'left',
+      toNode: 'kafka',
+      toSide: 'right',
+      color: '3',
+    },
+    {
+      id: 'e11',
+      fromNode: 'monitoring',
+      fromSide: 'left',
+      toNode: 'redis',
+      toSide: 'right',
+      label: 'metrics',
+      color: '3',
+    },
+  ],
+}
+
+/**
+ * Sub-canvas: API Gateway internals
+ */
+export const apiGatewayCanvas: CanvasData = {
+  nodes: [
+    {
+      id: 'group-gw',
+      type: 'group',
+      x: -20,
+      y: -20,
+      width: 500,
+      height: 260,
+      label: 'API Gateway Internals',
+      color: '4',
+    },
+    {
+      id: 'nginx',
+      type: 'text',
+      text: 'Nginx\nReverse Proxy',
+      x: 0,
+      y: 30,
+      width: 130,
+      height: 55,
+      color: '4',
+    },
+    {
+      id: 'kong',
+      type: 'text',
+      text: 'Kong\nAPI Management',
+      x: 180,
+      y: 30,
+      width: 130,
+      height: 55,
+      color: '4',
+    },
+    {
+      id: 'rate-limiter',
+      type: 'text',
+      text: 'Rate Limiter\nRedis-backed',
+      x: 0,
+      y: 130,
+      width: 130,
+      height: 55,
+      color: '1',
+    },
+    {
+      id: 'cors',
+      type: 'text',
+      text: 'CORS\nMiddleware',
+      x: 180,
+      y: 130,
+      width: 130,
+      height: 55,
+      color: '1',
+    },
+    {
+      id: 'lb',
+      type: 'text',
+      text: 'Load Balancer\nRound Robin',
+      x: 360,
+      y: 30,
+      width: 130,
+      height: 55,
+      color: '5',
+    },
+  ],
+  edges: [
+    { id: 'gw-e1', fromNode: 'nginx', toNode: 'kong' },
+    { id: 'gw-e2', fromNode: 'kong', toNode: 'lb' },
+    { id: 'gw-e3', fromNode: 'kong', fromSide: 'bottom', toNode: 'rate-limiter', toSide: 'top' },
+    { id: 'gw-e4', fromNode: 'kong', fromSide: 'bottom', toNode: 'cors', toSide: 'top' },
+  ],
+}
+
+/**
+ * Sub-canvas: Kubernetes cluster
+ */
+export const k8sCanvas: CanvasData = {
+  nodes: [
+    {
+      id: 'k8s-group',
+      type: 'group',
+      x: -20,
+      y: -20,
+      width: 620,
+      height: 280,
+      label: 'EKS Cluster',
+      color: '5',
+    },
+    {
+      id: 'ns-prod',
+      type: 'group',
+      x: 0,
+      y: 20,
+      width: 280,
+      height: 200,
+      label: 'namespace: production',
+      color: '4',
+    },
+    {
+      id: 'ns-staging',
+      type: 'group',
+      x: 310,
+      y: 20,
+      width: 280,
+      height: 200,
+      label: 'namespace: staging',
+      color: '3',
+    },
+    {
+      id: 'pod-api-1',
+      type: 'text',
+      text: 'api-pod-1\nRunning',
+      x: 20,
+      y: 60,
+      width: 110,
+      height: 50,
+      color: '4',
+    },
+    {
+      id: 'pod-api-2',
+      type: 'text',
+      text: 'api-pod-2\nRunning',
+      x: 150,
+      y: 60,
+      width: 110,
+      height: 50,
+      color: '4',
+    },
+    {
+      id: 'pod-worker',
+      type: 'text',
+      text: 'worker-pod\nRunning',
+      x: 20,
+      y: 140,
+      width: 110,
+      height: 50,
+      color: '2',
+    },
+    {
+      id: 'pod-staging-api',
+      type: 'text',
+      text: 'api-pod-1\nRunning',
+      x: 330,
+      y: 60,
+      width: 110,
+      height: 50,
+      color: '3',
+    },
+    {
+      id: 'pod-staging-worker',
+      type: 'text',
+      text: 'worker-pod\nPending',
+      x: 330,
+      y: 140,
+      width: 110,
+      height: 50,
+      color: '3',
+    },
+    {
+      id: 'ingress',
+      type: 'text',
+      text: 'Ingress Controller\nALB',
+      x: 200,
+      y: 300,
+      width: 180,
+      height: 50,
+      color: '5',
+    },
+  ],
+  edges: [
+    { id: 'k-e1', fromNode: 'ingress', fromSide: 'top', toNode: 'pod-api-1', toSide: 'bottom', label: 'route' },
+    { id: 'k-e2', fromNode: 'ingress', fromSide: 'top', toNode: 'pod-api-2', toSide: 'bottom' },
+    { id: 'k-e3', fromNode: 'pod-api-1', fromSide: 'bottom', toNode: 'pod-worker', toSide: 'top', label: 'jobs' },
+  ],
+}
+
+/**
+ * Sub-canvas: User Service internals
+ */
+export const userServiceCanvas: CanvasData = {
+  nodes: [
+    {
+      id: 'handler',
+      type: 'text',
+      text: 'HTTP Handler\nAxum Router',
+      x: 0,
+      y: 0,
+      width: 140,
+      height: 55,
+      color: '4',
+    },
+    {
+      id: 'middleware',
+      type: 'text',
+      text: 'Middleware\nAuth + Logging',
+      x: 0,
+      y: 90,
+      width: 140,
+      height: 55,
+      color: '1',
+    },
+    {
+      id: 'domain',
+      type: 'text',
+      text: 'Domain Layer\nBusiness Logic',
+      x: 200,
+      y: 0,
+      width: 140,
+      height: 55,
+      color: '4',
+    },
+    {
+      id: 'repo',
+      type: 'text',
+      text: 'Repository\nSQLx',
+      x: 200,
+      y: 90,
+      width: 140,
+      height: 55,
+      color: '6',
+    },
+    {
+      id: 'events',
+      type: 'text',
+      text: 'Event Publisher\nKafka Producer',
+      x: 400,
+      y: 40,
+      width: 140,
+      height: 55,
+      color: '2',
+    },
+  ],
+  edges: [
+    { id: 'us-e1', fromNode: 'handler', toNode: 'domain', label: 'calls' },
+    { id: 'us-e2', fromNode: 'handler', fromSide: 'bottom', toNode: 'middleware', toSide: 'top' },
+    { id: 'us-e3', fromNode: 'domain', fromSide: 'bottom', toNode: 'repo', toSide: 'top', label: 'queries' },
+    { id: 'us-e4', fromNode: 'domain', toNode: 'events', label: 'publishes' },
+  ],
+}
+
+/**
+ * Map refs to sub-canvases.
+ */
+export const canvasMap: Record<string, CanvasData> = {
+  'canvas:api-gateway': apiGatewayCanvas,
+  'canvas:k8s': k8sCanvas,
+  'canvas:user-service': userServiceCanvas,
+}

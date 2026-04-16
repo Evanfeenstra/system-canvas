@@ -1,0 +1,18 @@
+{
+  "name": "system-canvas-monorepo",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "demo"
+  ],
+  "scripts": {
+    "build": "npm run build:core && npm run build:react",
+    "build:core": "npm run build -w system-canvas",
+    "build:react": "npm run build -w system-canvas-react",
+    "dev": "npm run dev -w system-canvas-demo",
+    "typecheck": "npm run typecheck --workspaces"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}
