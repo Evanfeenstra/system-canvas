@@ -15,6 +15,7 @@ interface FileNodeProps {
  * - Thinner border (0.75px)
  * - Dog-ear fold in the top-right corner
  * - Monospace filename rendering
+ * - Text clipped to node bounds
  */
 export function FileNode({
   node,
@@ -35,18 +36,20 @@ export function FileNode({
 
   // Dog-ear size
   const fold = 10
+  const textPadding = 10
+  const maxTextWidth = width - textPadding * 2 - fold
 
   // File shape: rectangle with a folded corner (top-right)
   const shapePath = [
-    `M ${x + 2} ${y}`,              // top-left (slight radius start)
-    `L ${x + width - fold} ${y}`,    // top edge to fold start
-    `L ${x + width} ${y + fold}`,    // diagonal fold
-    `L ${x + width} ${y + height - 2}`, // right edge
-    `Q ${x + width} ${y + height} ${x + width - 2} ${y + height}`, // bottom-right corner
-    `L ${x + 2} ${y + height}`,      // bottom edge
-    `Q ${x} ${y + height} ${x} ${y + height - 2}`, // bottom-left corner
-    `L ${x} ${y + 2}`,              // left edge
-    `Q ${x} ${y} ${x + 2} ${y}`,    // top-left corner
+    `M ${x + 2} ${y}`,
+    `L ${x + width - fold} ${y}`,
+    `L ${x + width} ${y + fold}`,
+    `L ${x + width} ${y + height - 2}`,
+    `Q ${x + width} ${y + height} ${x + width - 2} ${y + height}`,
+    `L ${x + 2} ${y + height}`,
+    `Q ${x} ${y + height} ${x} ${y + height - 2}`,
+    `L ${x} ${y + 2}`,
+    `Q ${x} ${y} ${x + 2} ${y}`,
     'Z',
   ].join(' ')
 
@@ -55,6 +58,7 @@ export function FileNode({
 
   const strokeColor = node.resolvedStroke
   const thinStroke = 0.75
+  const clipId = `file-clip-${node.id}`
 
   return (
     <g
@@ -64,6 +68,18 @@ export function FileNode({
       onDoubleClick={(e) => onDoubleClick(node, e)}
       onContextMenu={(e) => onContextMenu(node, e)}
     >
+      {/* Clip path to contain text within the node */}
+      <defs>
+        <clipPath id={clipId}>
+          <rect
+            x={x + textPadding}
+            y={y}
+            width={maxTextWidth}
+            height={height}
+          />
+        </clipPath>
+      </defs>
+
       {/* Opaque backer */}
       <path d={shapePath} fill={theme.background} />
       {/* Styled overlay */}
@@ -82,47 +98,50 @@ export function FileNode({
         opacity={0.5}
       />
 
-      {/* Directory path (small, above filename) */}
-      {dirPath && (
-        <text
-          x={x + 10}
-          y={y + 14}
-          fill={theme.node.sublabelColor}
-          fontSize={theme.node.sublabelFontSize - 1}
-          fontFamily={theme.node.fontFamily}
-          pointerEvents="none"
-          opacity={0.6}
-        >
-          {dirPath}/
-        </text>
-      )}
+      {/* Clipped text group */}
+      <g clipPath={`url(#${clipId})`}>
+        {/* Directory path (small, above filename) */}
+        {dirPath && (
+          <text
+            x={x + textPadding}
+            y={y + 14}
+            fill={theme.node.sublabelColor}
+            fontSize={theme.node.sublabelFontSize - 1}
+            fontFamily={theme.node.fontFamily}
+            pointerEvents="none"
+            opacity={0.6}
+          >
+            {dirPath}/
+          </text>
+        )}
 
-      {/* Filename */}
-      <text
-        x={x + 10}
-        y={y + (dirPath ? 28 : height / 2 + (subpath ? -2 : 4))}
-        fill={theme.node.labelColor}
-        fontSize={theme.node.fontSize - 1}
-        fontWeight={500}
-        fontFamily={theme.node.fontFamily}
-        pointerEvents="none"
-      >
-        {fileName}
-      </text>
-
-      {/* Subpath */}
-      {subpath && (
+        {/* Filename */}
         <text
-          x={x + 10}
-          y={y + (dirPath ? 40 : height / 2 + theme.node.fontSize + 2)}
-          fill={theme.node.sublabelColor}
-          fontSize={theme.node.sublabelFontSize}
+          x={x + textPadding}
+          y={y + (dirPath ? 28 : height / 2 + (subpath ? -2 : 4))}
+          fill={theme.node.labelColor}
+          fontSize={theme.node.fontSize - 1}
+          fontWeight={500}
           fontFamily={theme.node.fontFamily}
           pointerEvents="none"
         >
-          {subpath}
+          {fileName}
         </text>
-      )}
+
+        {/* Subpath */}
+        {subpath && (
+          <text
+            x={x + textPadding}
+            y={y + (dirPath ? 40 : height / 2 + theme.node.fontSize + 2)}
+            fill={theme.node.sublabelColor}
+            fontSize={theme.node.sublabelFontSize}
+            fontFamily={theme.node.fontFamily}
+            pointerEvents="none"
+          >
+            {subpath}
+          </text>
+        )}
+      </g>
 
       {/* Ref indicator */}
       {node.isNavigable && theme.node.refIndicator.icon !== 'none' && (
