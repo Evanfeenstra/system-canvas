@@ -5,6 +5,7 @@ import type {
   ResolvedNode,
   CanvasTheme,
   NodeUpdate,
+  EdgeUpdate,
   NodeMenuOption,
   NodeType,
 } from './types.js'
@@ -259,4 +260,27 @@ export function removeNode(canvas: CanvasData, nodeId: string): CanvasData {
     (e) => e.fromNode !== nodeId && e.toNode !== nodeId
   )
   return { ...canvas, nodes, edges }
+}
+
+/** Patch an edge by id. Returns the same reference if the edge is not found. */
+export function updateEdge(
+  canvas: CanvasData,
+  edgeId: string,
+  patch: EdgeUpdate
+): CanvasData {
+  const edges = canvas.edges ?? []
+  let changed = false
+  const next = edges.map((e) => {
+    if (e.id !== edgeId) return e
+    changed = true
+    return { ...e, ...patch }
+  })
+  if (!changed) return canvas
+  return { ...canvas, edges: next }
+}
+
+/** Remove an edge by id. */
+export function removeEdge(canvas: CanvasData, edgeId: string): CanvasData {
+  const edges = (canvas.edges ?? []).filter((e) => e.id !== edgeId)
+  return { ...canvas, edges }
 }

@@ -12,6 +12,7 @@ interface UseCanvasInteractionOptions {
   onNodeClick?: (node: CanvasNode) => void
   onNodeDoubleClick?: (node: CanvasNode) => void
   onEdgeClick?: (edge: CanvasEdge) => void
+  onEdgeDoubleClick?: (edge: CanvasEdge) => void
   onContextMenu?: (event: ContextMenuEvent) => void
   /** Called when a navigable node (has ref) is clicked to initiate navigation */
   onNavigableNodeClick?: (node: ResolvedNode) => void
@@ -21,6 +22,8 @@ interface UseCanvasInteractionOptions {
   editable?: boolean
   onSelect?: (nodeId: string | null) => void
   onBeginEdit?: (node: ResolvedNode) => void
+  onSelectEdge?: (edgeId: string | null) => void
+  onBeginEditEdge?: (edge: CanvasEdge) => void
 }
 
 interface UseCanvasInteractionResult {
@@ -28,6 +31,7 @@ interface UseCanvasInteractionResult {
   handleNodeDoubleClick: (node: ResolvedNode, event: React.MouseEvent) => void
   handleNodeNavigate: (node: ResolvedNode, event: React.MouseEvent) => void
   handleEdgeClick: (edge: CanvasEdge, event: React.MouseEvent) => void
+  handleEdgeDoubleClick: (edge: CanvasEdge, event: React.MouseEvent) => void
   handleCanvasContextMenu: (event: React.MouseEvent) => void
   handleNodeContextMenu: (node: ResolvedNode, event: React.MouseEvent) => void
   handleEdgeContextMenu: (edge: CanvasEdge, event: React.MouseEvent) => void
@@ -42,12 +46,15 @@ export function useCanvasInteraction(
     onNodeClick,
     onNodeDoubleClick,
     onEdgeClick,
+    onEdgeDoubleClick,
     onContextMenu,
     onNavigableNodeClick,
     viewport,
     editable,
     onSelect,
     onBeginEdit,
+    onSelectEdge,
+    onBeginEditEdge,
   } = options
 
   const handleNodeClick = useCallback(
@@ -55,10 +62,11 @@ export function useCanvasInteraction(
       event.stopPropagation()
       if (editable) {
         onSelect?.(node.id)
+        onSelectEdge?.(null)
       }
       onNodeClick?.(node)
     },
-    [editable, onNodeClick, onSelect]
+    [editable, onNodeClick, onSelect, onSelectEdge]
   )
 
   const handleNodeDoubleClick = useCallback(
@@ -84,9 +92,24 @@ export function useCanvasInteraction(
   const handleEdgeClick = useCallback(
     (edge: CanvasEdge, event: React.MouseEvent) => {
       event.stopPropagation()
+      if (editable) {
+        onSelectEdge?.(edge.id)
+        onSelect?.(null)
+      }
       onEdgeClick?.(edge)
     },
-    [onEdgeClick]
+    [editable, onEdgeClick, onSelectEdge, onSelect]
+  )
+
+  const handleEdgeDoubleClick = useCallback(
+    (edge: CanvasEdge, event: React.MouseEvent) => {
+      event.stopPropagation()
+      onEdgeDoubleClick?.(edge)
+      if (editable) {
+        onBeginEditEdge?.(edge)
+      }
+    },
+    [editable, onEdgeDoubleClick, onBeginEditEdge]
   )
 
   const createContextMenuHandler = useCallback(
@@ -139,9 +162,10 @@ export function useCanvasInteraction(
     (_event: React.MouseEvent) => {
       if (editable) {
         onSelect?.(null)
+        onSelectEdge?.(null)
       }
     },
-    [editable, onSelect]
+    [editable, onSelect, onSelectEdge]
   )
 
   return {
@@ -149,6 +173,7 @@ export function useCanvasInteraction(
     handleNodeDoubleClick,
     handleNodeNavigate,
     handleEdgeClick,
+    handleEdgeDoubleClick,
     handleCanvasContextMenu,
     handleNodeContextMenu,
     handleEdgeContextMenu,

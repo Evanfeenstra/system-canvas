@@ -36,6 +36,7 @@ React bindings. Depends on `system-canvas` for all types and math.
 - `src/components/EdgeRenderer.tsx` — Renders all edges with arrowhead markers, labels, and click targets.
 - `src/components/RefIndicator.tsx` — Clickable "enter sub-canvas" corner drawn on navigable nodes.
 - `src/components/NodeEditor.tsx` — Inline editor rendered via `<foreignObject>` for text/file/link/group fields.
+- `src/components/EdgeLabelEditor.tsx` — Inline edge label editor rendered via `<foreignObject>` centered on the edge midpoint.
 - `src/components/AddNodeButton.tsx` — Default floating "+" FAB and add-node popover menu.
 - `src/components/Breadcrumbs.tsx` — Navigation breadcrumb trail overlay.
 - `src/hooks/useViewport.ts` — d3-zoom integration, fit-to-content. Rejects pan gestures originating inside `.system-canvas-node` so node drags don't also pan.
@@ -68,18 +69,21 @@ Breadcrumbs allow navigating back up. The library exposes `currentCanvasRef` (th
 
 The library is stateless with respect to canvas data. When `editable` is true, it emits granular mutation callbacks; the consumer owns `CanvasData` and passes the updated object back as the `canvas` prop (or via the `canvases` map for sub-canvases).
 
-Callbacks (all receive `canvasRef: string | undefined` — the ref of the canvas the node lives on, or `undefined` for the root):
+Callbacks (all receive `canvasRef: string | undefined` — the ref of the canvas the node/edge lives on, or `undefined` for the root):
 - `onNodeAdd(node, canvasRef)` — fired when the user picks an option from the add-node menu.
 - `onNodeUpdate(nodeId, patch, canvasRef)` — fired after drags and editor commits. `patch: NodeUpdate` is `Partial<Omit<CanvasNode, 'id' | 'type'>>`.
 - `onNodeDelete(nodeId, canvasRef)` — fired when the user presses Delete/Backspace with a selected node.
+- `onEdgeUpdate(edgeId, patch, canvasRef)` — fired after edge label editor commits. `patch: EdgeUpdate` is `Partial<Omit<CanvasEdge, 'id'>>`.
+- `onEdgeDelete(edgeId, canvasRef)` — fired when the user presses Delete/Backspace with a selected edge.
 
-Consumers typically implement these by calling the core helpers `addNode / updateNode / removeNode` on their own `Record<string, CanvasData>` map.
+Consumers typically implement these by calling the core helpers `addNode / updateNode / removeNode / updateEdge / removeEdge` on their own `Record<string, CanvasData>` map.
 
 Editing UI:
 - **Add**: a floating "+" button opens a popover listing categories (with color swatch + icon) above base JSON Canvas types. Fully replaceable via the `renderAddNodeButton` render prop.
 - **Drag**: pointer-event drag on any node. Dragging a group moves its spatially-contained children (computed once at drag-start via `getGroupChildren`). Drag overrides are local to the library and cleared on pointerup; the committed position flows through `onNodeUpdate`.
 - **Edit**: double-click any node opens an inline editor in a `<foreignObject>` — `<textarea>` for `text`, `<input>` for `file` / `link` / `group`. Enter commits, Escape cancels.
-- **Delete**: single-click selects (dashed outline). The outer `<div>` has `tabIndex={0}` so Delete/Backspace fires `onNodeDelete`. Keys are scoped to the canvas — no window listener.
+- **Edges**: single-click selects an edge (thicker, high-contrast stroke). Double-click opens an inline label editor (`<foreignObject>` centered on the edge midpoint). Selecting an edge clears any node selection and vice versa. `onEdgeClick` always fires — in editable mode, selection happens alongside.
+- **Delete**: single-click selects (dashed outline for nodes, highlighted stroke for edges). The outer `<div>` has `tabIndex={0}` so Delete/Backspace fires `onNodeDelete` or `onEdgeDelete` depending on what's selected. Keys are scoped to the canvas — no window listener.
 - **Pan vs. drag**: d3-zoom's `.filter()` rejects any gesture whose target is inside `.system-canvas-node`, so node drags never double as canvas pans. Background drags still pan normally.
 
 ### Theme system

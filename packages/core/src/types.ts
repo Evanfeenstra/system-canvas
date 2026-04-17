@@ -240,6 +240,9 @@ export interface ContextMenuEvent {
 /** A partial update to an existing node (x/y/text/label/url/file/etc.). */
 export type NodeUpdate = Partial<Omit<CanvasNode, 'id' | 'type'>>
 
+/** A partial update to an existing edge (label/color/style/endpoints/etc.). */
+export type EdgeUpdate = Partial<Omit<CanvasEdge, 'id'>>
+
 /** An entry in the add-node menu. */
 export interface NodeMenuOption {
   kind: 'category' | 'type'

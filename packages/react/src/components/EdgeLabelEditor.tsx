@@ -1,0 +1,105 @@
+import React, { useEffect, useRef, useState } from 'react'
+import type { CanvasTheme, EdgeUpdate } from 'system-canvas'
+
+interface EdgeLabelEditorProps {
+  initialLabel: string
+  midpoint: { x: number; y: number }
+  theme: CanvasTheme
+  onCommit: (patch: EdgeUpdate) => void
+  onCancel: () => void
+}
+
+const EDITOR_WIDTH = 160
+
+/**
+ * Inline edge label editor rendered inside a <foreignObject> centered
+ * on the edge midpoint. Enter commits, Escape cancels.
+ */
+export function EdgeLabelEditor({
+  initialLabel,
+  midpoint,
+  theme,
+  onCommit,
+  onCancel,
+}: EdgeLabelEditorProps) {
+  const [value, setValue] = useState(initialLabel)
+  const inputRef = useRef<HTMLInputElement | null>(null)
+  const committedRef = useRef(false)
+
+  useEffect(() => {
+    const el = inputRef.current
+    if (el) {
+      el.focus()
+      const end = el.value.length
+      el.setSelectionRange(end, end)
+    }
+  }, [])
+
+  const commit = () => {
+    if (committedRef.current) return
+    committedRef.current = true
+    if (value === initialLabel) {
+      onCancel()
+      return
+    }
+    onCommit({ label: value })
+  }
+
+  const cancel = () => {
+    if (committedRef.current) return
+    committedRef.current = true
+    onCancel()
+  }
+
+  const stopPointer = (e: React.PointerEvent | React.MouseEvent) => {
+    // Prevent the SVG's pan/drag handlers from stealing the event.
+    e.stopPropagation()
+  }
+
+  const fontSize = theme.edge.labelFontSize
+  const height = fontSize + 14
+
+  return (
+    <foreignObject
+      x={midpoint.x - EDITOR_WIDTH / 2}
+      y={midpoint.y - height / 2}
+      width={EDITOR_WIDTH}
+      height={height}
+      onPointerDown={stopPointer}
+      onMouseDown={stopPointer}
+      onClick={stopPointer}
+      onDoubleClick={stopPointer}
+    >
+      <input
+        ref={inputRef}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            commit()
+          } else if (e.key === 'Escape') {
+            e.preventDefault()
+            cancel()
+          }
+        }}
+        placeholder="Label"
+        style={{
+          width: '100%',
+          height: '100%',
+          boxSizing: 'border-box',
+          padding: '2px 6px',
+          fontFamily: theme.node.fontFamily,
+          fontSize,
+          background: theme.background,
+          color: theme.edge.labelColor,
+          border: `1.5px solid ${theme.node.labelColor}`,
+          borderRadius: 4,
+          outline: 'none',
+          textAlign: 'center',
+        }}
+      />
+    </foreignObject>
+  )
+}

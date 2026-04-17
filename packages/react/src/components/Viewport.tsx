@@ -12,11 +12,14 @@ import type {
   EdgeStyle,
   ViewportState,
   NodeUpdate,
+  EdgeUpdate,
 } from 'system-canvas'
+import { computeEdgeMidpoint } from 'system-canvas'
 import { useViewport } from '../hooks/useViewport.js'
 import { NodeRenderer } from './NodeRenderer.js'
 import { EdgeRenderer } from './EdgeRenderer.js'
 import { NodeEditor } from './NodeEditor.js'
+import { EdgeLabelEditor } from './EdgeLabelEditor.js'
 import type { ResizeCorner, ResizeOverride } from '../hooks/useNodeResize.js'
 
 interface ViewportProps {
@@ -33,6 +36,7 @@ interface ViewportProps {
   onNodeDoubleClick: (node: ResolvedNode, event: React.MouseEvent) => void
   onNodeNavigate: (node: ResolvedNode, event: React.MouseEvent) => void
   onEdgeClick: (edge: CanvasEdge, event: React.MouseEvent) => void
+  onEdgeDoubleClick?: (edge: CanvasEdge, event: React.MouseEvent) => void
   onCanvasClick?: (event: React.MouseEvent) => void
   onCanvasContextMenu: (event: React.MouseEvent) => void
   onNodeContextMenu: (node: ResolvedNode, event: React.MouseEvent) => void
@@ -42,6 +46,8 @@ interface ViewportProps {
   onNodePointerDown?: (node: ResolvedNode, event: React.PointerEvent) => void
   selectedId?: string | null
   editingId?: string | null
+  selectedEdgeId?: string | null
+  editingEdgeId?: string | null
   dragOverrides?: Map<string, { x: number; y: number }>
   resizeOverrides?: Map<string, ResizeOverride>
   onResizeHandlePointerDown?: (
@@ -51,6 +57,8 @@ interface ViewportProps {
   ) => void
   onEditorCommit?: (patch: NodeUpdate) => void
   onEditorCancel?: () => void
+  onEdgeEditorCommit?: (patch: EdgeUpdate) => void
+  onEdgeEditorCancel?: () => void
 }
 
 export interface ViewportHandle {
@@ -76,6 +84,7 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
       onNodeDoubleClick,
       onNodeNavigate,
       onEdgeClick,
+      onEdgeDoubleClick,
       onCanvasClick,
       onCanvasContextMenu,
       onNodeContextMenu,
@@ -83,11 +92,15 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
       onNodePointerDown,
       selectedId,
       editingId,
+      selectedEdgeId,
+      editingEdgeId,
       dragOverrides,
       resizeOverrides,
       onResizeHandlePointerDown,
       onEditorCommit,
       onEditorCancel,
+      onEdgeEditorCommit,
+      onEdgeEditorCancel,
     },
     ref
   ) {
@@ -152,6 +165,18 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
       ? renderNodes.find((n) => n.id === editingId) ?? null
       : null
 
+    // Compute edge editor anchor (midpoint of the edge being edited)
+    const editingEdge = editingEdgeId
+      ? edges.find((e) => e.id === editingEdgeId) ?? null
+      : null
+    const editingEdgeMidpoint = (() => {
+      if (!editingEdge) return null
+      const from = renderNodeMap.get(editingEdge.fromNode)
+      const to = renderNodeMap.get(editingEdge.toNode)
+      if (!from || !to) return null
+      return computeEdgeMidpoint(editingEdge, from, to)
+    })()
+
     return (
       <svg
         ref={svgRef}
@@ -200,7 +225,10 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
             theme={theme}
             defaultEdgeStyle={edgeStyle}
             onClick={onEdgeClick}
+            onDoubleClick={onEdgeDoubleClick}
             onContextMenu={onEdgeContextMenu}
+            selectedId={selectedEdgeId}
+            editingId={editingEdgeId}
           />
 
           {/* Nodes on top */}
@@ -226,6 +254,20 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
               onCancel={onEditorCancel}
             />
           )}
+
+          {/* Inline edge label editor at the edge midpoint */}
+          {editingEdge &&
+            editingEdgeMidpoint &&
+            onEdgeEditorCommit &&
+            onEdgeEditorCancel && (
+              <EdgeLabelEditor
+                initialLabel={editingEdge.label ?? ''}
+                midpoint={editingEdgeMidpoint}
+                theme={theme}
+                onCommit={onEdgeEditorCommit}
+                onCancel={onEdgeEditorCancel}
+              />
+            )}
         </g>
       </svg>
     )

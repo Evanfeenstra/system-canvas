@@ -9,6 +9,7 @@ import type {
   ContextMenuEvent,
   ResolvedNode,
   NodeUpdate,
+  EdgeUpdate,
   NodeMenuOption,
 } from 'system-canvas'
 import {
@@ -55,6 +56,7 @@ export interface SystemCanvasProps {
   onNodeClick?: (node: CanvasNode) => void
   onNodeDoubleClick?: (node: CanvasNode) => void
   onEdgeClick?: (edge: CanvasEdge) => void
+  onEdgeDoubleClick?: (edge: CanvasEdge) => void
   onContextMenu?: (event: ContextMenuEvent) => void
 
   // --- Editing ---
@@ -67,6 +69,12 @@ export interface SystemCanvasProps {
     canvasRef: string | undefined
   ) => void
   onNodeDelete?: (nodeId: string, canvasRef: string | undefined) => void
+  onEdgeUpdate?: (
+    edgeId: string,
+    patch: EdgeUpdate,
+    canvasRef: string | undefined
+  ) => void
+  onEdgeDelete?: (edgeId: string, canvasRef: string | undefined) => void
   /** Fully replace the default add-node FAB. */
   renderAddNodeButton?: (props: AddNodeButtonRenderProps) => React.ReactNode
 
@@ -100,11 +108,14 @@ export function SystemCanvas({
   onNodeClick,
   onNodeDoubleClick,
   onEdgeClick,
+  onEdgeDoubleClick,
   onContextMenu,
   editable = false,
   onNodeAdd,
   onNodeUpdate,
   onNodeDelete,
+  onEdgeUpdate,
+  onEdgeDelete,
   renderAddNodeButton,
   theme: themeProp,
   edgeStyle = 'bezier',
@@ -182,11 +193,15 @@ export function SystemCanvas({
   // Selection + editing state (editable mode)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
+  const [editingEdgeId, setEditingEdgeId] = useState<string | null>(null)
 
   // Clear selection/editing when navigating between canvases
   useEffect(() => {
     setSelectedId(null)
     setEditingId(null)
+    setSelectedEdgeId(null)
+    setEditingEdgeId(null)
   }, [currentCanvasRef])
 
   // Drag
@@ -228,12 +243,17 @@ export function SystemCanvas({
     setEditingId(node.id)
   }, [])
 
+  const handleBeginEditEdge = useCallback((edge: CanvasEdge) => {
+    setEditingEdgeId(edge.id)
+  }, [])
+
   // Interaction handlers
   const {
     handleNodeClick,
     handleNodeDoubleClick,
     handleNodeNavigate,
     handleEdgeClick,
+    handleEdgeDoubleClick,
     handleCanvasClick,
     handleCanvasContextMenu,
     handleNodeContextMenu,
@@ -242,12 +262,15 @@ export function SystemCanvas({
     onNodeClick,
     onNodeDoubleClick,
     onEdgeClick,
+    onEdgeDoubleClick,
     onContextMenu,
     onNavigableNodeClick: handleNavigableNodeClick,
     viewport: viewportStateRef,
     editable,
     onSelect: setSelectedId,
     onBeginEdit: handleBeginEdit,
+    onSelectEdge: setSelectedEdgeId,
+    onBeginEditEdge: handleBeginEditEdge,
   })
 
   // Editor commit/cancel
@@ -262,6 +285,20 @@ export function SystemCanvas({
   )
   const handleEditorCancel = useCallback(() => {
     setEditingId(null)
+  }, [])
+
+  // Edge editor commit/cancel
+  const handleEdgeEditorCommit = useCallback(
+    (patch: EdgeUpdate) => {
+      if (editingEdgeId) {
+        onEdgeUpdate?.(editingEdgeId, patch, currentCanvasRef)
+      }
+      setEditingEdgeId(null)
+    },
+    [editingEdgeId, onEdgeUpdate, currentCanvasRef]
+  )
+  const handleEdgeEditorCancel = useCallback(() => {
+    setEditingEdgeId(null)
   }, [])
 
   // Cascade offset for rapid successive adds
@@ -316,25 +353,40 @@ export function SystemCanvas({
     [onNodeAdd, currentCanvasRef]
   )
 
-  // Keyboard: Delete/Backspace removes selected; Escape clears selection/editing
+  // Keyboard: Delete/Backspace removes selected node/edge; Escape clears selection/editing
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
       if (!editable) return
       if (e.key === 'Escape') {
         setEditingId(null)
         setSelectedId(null)
+        setEditingEdgeId(null)
+        setSelectedEdgeId(null)
         return
       }
-      if (editingId) return // let the editor own the keys
+      if (editingId || editingEdgeId) return // let the editor own the keys
       if (e.key === 'Delete' || e.key === 'Backspace') {
         if (selectedId) {
           e.preventDefault()
           onNodeDelete?.(selectedId, currentCanvasRef)
           setSelectedId(null)
+        } else if (selectedEdgeId) {
+          e.preventDefault()
+          onEdgeDelete?.(selectedEdgeId, currentCanvasRef)
+          setSelectedEdgeId(null)
         }
       }
     },
-    [editable, editingId, selectedId, onNodeDelete, currentCanvasRef]
+    [
+      editable,
+      editingId,
+      editingEdgeId,
+      selectedId,
+      selectedEdgeId,
+      onNodeDelete,
+      onEdgeDelete,
+      currentCanvasRef,
+    ]
   )
 
   const renderProps: AddNodeButtonRenderProps = { options: menuOptions, addNode, theme }
@@ -401,6 +453,7 @@ export function SystemCanvas({
         onNodeDoubleClick={handleNodeDoubleClick}
         onNodeNavigate={handleNodeNavigate}
         onEdgeClick={handleEdgeClick}
+        onEdgeDoubleClick={handleEdgeDoubleClick}
         onCanvasClick={editable ? handleCanvasClick : undefined}
         onCanvasContextMenu={handleCanvasContextMenu}
         onNodeContextMenu={handleNodeContextMenu}
@@ -408,11 +461,15 @@ export function SystemCanvas({
         onNodePointerDown={editable ? onNodePointerDown : undefined}
         selectedId={editable ? selectedId : null}
         editingId={editable ? editingId : null}
+        selectedEdgeId={editable ? selectedEdgeId : null}
+        editingEdgeId={editable ? editingEdgeId : null}
         dragOverrides={dragOverrides}
         resizeOverrides={resizeOverrides}
         onResizeHandlePointerDown={editable ? onResizeHandlePointerDown : undefined}
         onEditorCommit={handleEditorCommit}
         onEditorCancel={handleEditorCancel}
+        onEdgeEditorCommit={handleEdgeEditorCommit}
+        onEdgeEditorCancel={handleEdgeEditorCancel}
       />
 
       {/* Add-node FAB (editable only) */}

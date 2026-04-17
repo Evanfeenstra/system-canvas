@@ -26,6 +26,7 @@ export type {
   BoundingBox,
   ContextMenuEvent,
   NodeUpdate,
+  EdgeUpdate,
   NodeMenuOption,
 } from './types.js'
 
@@ -66,6 +67,8 @@ export {
   addNode,
   updateNode,
   removeNode,
+  updateEdge,
+  removeEdge,
 } from './canvas.js'
 
 // Convenience theme collection

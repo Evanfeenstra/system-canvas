@@ -17,7 +17,12 @@ interface EdgeRendererProps {
   theme: CanvasTheme
   defaultEdgeStyle: EdgeStyle
   onClick: (edge: CanvasEdge, event: React.MouseEvent) => void
+  onDoubleClick?: (edge: CanvasEdge, event: React.MouseEvent) => void
   onContextMenu: (edge: CanvasEdge, event: React.MouseEvent) => void
+  /** Id of the currently selected edge (editable mode) */
+  selectedId?: string | null
+  /** Id of the edge whose label is currently being edited (label is hidden) */
+  editingId?: string | null
 }
 
 /**
@@ -30,11 +35,14 @@ export function EdgeRenderer({
   theme,
   defaultEdgeStyle,
   onClick,
+  onDoubleClick,
   onContextMenu,
+  selectedId,
+  editingId,
 }: EdgeRendererProps) {
   return (
     <>
-      {/* Arrowhead marker definition */}
+      {/* Arrowhead marker definitions: default + selected variant */}
       <defs>
         <marker
           id="system-canvas-arrowhead"
@@ -50,6 +58,20 @@ export function EdgeRenderer({
             fill={theme.edge.stroke}
           />
         </marker>
+        <marker
+          id="system-canvas-arrowhead-selected"
+          markerWidth={theme.edge.arrowSize}
+          markerHeight={theme.edge.arrowSize * 0.7}
+          refX={theme.edge.arrowSize - 1}
+          refY={theme.edge.arrowSize * 0.35}
+          orient="auto"
+          markerUnits="userSpaceOnUse"
+        >
+          <polygon
+            points={`0 0, ${theme.edge.arrowSize} ${theme.edge.arrowSize * 0.35}, 0 ${theme.edge.arrowSize * 0.7}`}
+            fill={theme.node.labelColor}
+          />
+        </marker>
       </defs>
 
       {edges.map((edge) => {
@@ -60,13 +82,23 @@ export function EdgeRenderer({
         const pathD = computeEdgePath(edge, fromNode, toNode, defaultEdgeStyle)
         const midpoint = computeEdgeMidpoint(edge, fromNode, toNode)
 
-        // Resolve edge color
-        const edgeColor = edge.color
+        const isSelected = selectedId === edge.id
+        const isEditing = editingId === edge.id
+
+        // Resolve edge color (selection overrides to high-contrast label color)
+        const baseColor = edge.color
           ? resolveColor(edge.color, theme).stroke
           : theme.edge.stroke
+        const edgeColor = isSelected ? theme.node.labelColor : baseColor
+        const strokeWidth = isSelected
+          ? theme.edge.strokeWidth * 1.75
+          : theme.edge.strokeWidth
 
         const toEnd = edge.toEnd ?? 'arrow'
         const fromEnd = edge.fromEnd ?? 'none'
+        const arrowId = isSelected
+          ? 'system-canvas-arrowhead-selected'
+          : 'system-canvas-arrowhead'
 
         return (
           <g
@@ -74,6 +106,7 @@ export function EdgeRenderer({
             className="system-canvas-edge"
             style={{ cursor: 'pointer' }}
             onClick={(e) => onClick(edge, e)}
+            onDoubleClick={(e) => onDoubleClick?.(edge, e)}
             onContextMenu={(e) => onContextMenu(edge, e)}
           >
             {/* Invisible wider path for easier click targeting */}
@@ -89,21 +122,13 @@ export function EdgeRenderer({
               d={pathD}
               fill="none"
               stroke={edgeColor}
-              strokeWidth={theme.edge.strokeWidth}
-              markerEnd={
-                toEnd === 'arrow'
-                  ? 'url(#system-canvas-arrowhead)'
-                  : undefined
-              }
-              markerStart={
-                fromEnd === 'arrow'
-                  ? 'url(#system-canvas-arrowhead)'
-                  : undefined
-              }
+              strokeWidth={strokeWidth}
+              markerEnd={toEnd === 'arrow' ? `url(#${arrowId})` : undefined}
+              markerStart={fromEnd === 'arrow' ? `url(#${arrowId})` : undefined}
             />
 
-            {/* Edge label */}
-            {edge.label && (
+            {/* Edge label (hidden while editing) */}
+            {edge.label && !isEditing && (
               <>
                 {/* Label background for readability */}
                 <rect
@@ -118,7 +143,7 @@ export function EdgeRenderer({
                 <text
                   x={midpoint.x}
                   y={midpoint.y}
-                  fill={theme.edge.labelColor}
+                  fill={isSelected ? theme.node.labelColor : theme.edge.labelColor}
                   fontSize={theme.edge.labelFontSize}
                   fontFamily={theme.node.fontFamily}
                   textAnchor="middle"

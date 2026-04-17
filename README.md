@@ -100,7 +100,14 @@ Nodes with a `ref` property become navigable. Provide an `onResolveCanvas` callb
 | `onNodeClick` | `(node: CanvasNode) => void` | Node click handler |
 | `onNodeDoubleClick` | `(node: CanvasNode) => void` | Node double-click handler |
 | `onEdgeClick` | `(edge: CanvasEdge) => void` | Edge click handler |
+| `onEdgeDoubleClick` | `(edge: CanvasEdge) => void` | Edge double-click handler |
 | `onContextMenu` | `(event: ContextMenuEvent) => void` | Right-click handler |
+| `editable` | `boolean` | Enable add / edit / move / delete for nodes and edges |
+| `onNodeAdd` | `(node, canvasRef) => void` | Fired after user picks an option from the add-node menu |
+| `onNodeUpdate` | `(nodeId, patch, canvasRef) => void` | Fired after drags and node editor commits |
+| `onNodeDelete` | `(nodeId, canvasRef) => void` | Fired on Delete/Backspace with a selected node |
+| `onEdgeUpdate` | `(edgeId, patch, canvasRef) => void` | Fired after edge label editor commits |
+| `onEdgeDelete` | `(edgeId, canvasRef) => void` | Fired on Delete/Backspace with a selected edge |
 | `onNavigate` | `(ref: string) => void` | Called when navigating to a sub-canvas |
 | `onBreadcrumbClick` | `(index: number) => void` | Called when a breadcrumb is clicked |
 | `rootLabel` | `string` | Root breadcrumb label (default: "Home") |

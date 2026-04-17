@@ -10,12 +10,16 @@ import {
   addNode as addNodeHelper,
   updateNode as updateNodeHelper,
   removeNode as removeNodeHelper,
+  updateEdge as updateEdgeHelper,
+  removeEdge as removeEdgeHelper,
 } from 'system-canvas'
 import type {
   CanvasData,
   CanvasTheme,
   CanvasNode,
+  CanvasEdge,
   NodeUpdate,
+  EdgeUpdate,
 } from 'system-canvas'
 import { rootCanvas as initialRoot, canvasMap as initialCanvasMap } from './data.js'
 
@@ -75,6 +79,28 @@ function App() {
       [key]: removeNodeHelper(prev[key] ?? { nodes: [], edges: [] }, nodeId),
     }))
   }, [])
+
+  const handleEdgeUpdate = useCallback(
+    (edgeId: string, patch: EdgeUpdate, canvasRef: string | undefined) => {
+      const key = keyFor(canvasRef)
+      setAllCanvases((prev) => ({
+        ...prev,
+        [key]: updateEdgeHelper(prev[key] ?? { nodes: [], edges: [] }, edgeId, patch),
+      }))
+    },
+    []
+  )
+
+  const handleEdgeDelete = useCallback(
+    (edgeId: string, canvasRef: string | undefined) => {
+      const key = keyFor(canvasRef)
+      setAllCanvases((prev) => ({
+        ...prev,
+        [key]: removeEdgeHelper(prev[key] ?? { nodes: [], edges: [] }, edgeId),
+      }))
+    },
+    []
+  )
 
   return (
     <div style={{ width: '100vw', height: '100vh', position: 'relative' }}>
@@ -160,8 +186,13 @@ function App() {
         onNodeAdd={handleNodeAdd}
         onNodeUpdate={handleNodeUpdate}
         onNodeDelete={handleNodeDelete}
+        onEdgeUpdate={handleEdgeUpdate}
+        onEdgeDelete={handleEdgeDelete}
         onNodeClick={(node: CanvasNode) => {
           console.log('Node clicked:', node.id)
+        }}
+        onEdgeClick={(edge: CanvasEdge) => {
+          console.log('Edge clicked:', edge.id)
         }}
         onNavigate={(ref: string) => {
           console.log('Navigating to:', ref)
