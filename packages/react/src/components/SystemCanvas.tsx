@@ -24,6 +24,7 @@ import {
 import { useNavigation } from '../hooks/useNavigation.js'
 import { useCanvasInteraction } from '../hooks/useCanvasInteraction.js'
 import { useNodeDrag } from '../hooks/useNodeDrag.js'
+import { useNodeResize } from '../hooks/useNodeResize.js'
 import { Viewport, type ViewportHandle } from './Viewport.js'
 import { Breadcrumbs } from './Breadcrumbs.js'
 import { AddNodeButton, type AddNodeButtonRenderProps } from './AddNodeButton.js'
@@ -201,6 +202,12 @@ export function SystemCanvas({
     nodesRef,
     onCommit: commitDrag,
   })
+
+  const { resizeOverrides, onHandlePointerDown: onResizeHandlePointerDown } =
+    useNodeResize({
+      viewport: viewportStateRef,
+      onCommit: commitDrag,
+    })
 
   // Zoom-then-navigate: animate toward the node, then swap canvas
   const handleNavigableNodeClick = useCallback(
@@ -402,6 +409,8 @@ export function SystemCanvas({
         selectedId={editable ? selectedId : null}
         editingId={editable ? editingId : null}
         dragOverrides={dragOverrides}
+        resizeOverrides={resizeOverrides}
+        onResizeHandlePointerDown={editable ? onResizeHandlePointerDown : undefined}
         onEditorCommit={handleEditorCommit}
         onEditorCancel={handleEditorCancel}
       />

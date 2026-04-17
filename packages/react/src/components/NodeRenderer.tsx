@@ -4,6 +4,8 @@ import { TextNode } from './TextNode.js'
 import { FileNode } from './FileNode.js'
 import { LinkNode } from './LinkNode.js'
 import { GroupNode } from './GroupNode.js'
+import { ResizeHandles } from './ResizeHandles.js'
+import type { ResizeCorner } from '../hooks/useNodeResize.js'
 
 interface NodeRendererProps {
   nodes: ResolvedNode[]
@@ -15,6 +17,11 @@ interface NodeRendererProps {
   onPointerDown?: (node: ResolvedNode, event: React.PointerEvent) => void
   selectedId?: string | null
   editingId?: string | null
+  onResizeHandlePointerDown?: (
+    node: ResolvedNode,
+    corner: ResizeCorner,
+    event: React.PointerEvent
+  ) => void
 }
 
 /**
@@ -31,6 +38,7 @@ export function NodeRenderer({
   onPointerDown,
   selectedId,
   editingId,
+  onResizeHandlePointerDown,
 }: NodeRendererProps) {
   // Separate groups from other nodes to ensure proper z-ordering.
   // Groups render first (behind), other nodes render on top.
@@ -49,6 +57,11 @@ export function NodeRenderer({
     isEditing: editingId === node.id,
   })
 
+  const selectedNode =
+    selectedId && editingId !== selectedId
+      ? nodes.find((n) => n.id === selectedId)
+      : undefined
+
   return (
     <>
       {/* Groups first (behind) */}
@@ -61,6 +74,15 @@ export function NodeRenderer({
         const Component = getNodeComponent(node.type)
         return <Component key={node.id} {...common(node)} />
       })}
+
+      {/* Resize handles for the selected node, drawn above everything */}
+      {selectedNode && onResizeHandlePointerDown && (
+        <ResizeHandles
+          node={selectedNode}
+          theme={theme}
+          onHandlePointerDown={onResizeHandlePointerDown}
+        />
+      )}
     </>
   )
 }

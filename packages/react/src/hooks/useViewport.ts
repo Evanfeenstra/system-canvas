@@ -52,6 +52,7 @@ export function useViewport(options: UseViewportOptions): UseViewportResult {
         const target = event.target as Element | null
         if (target && typeof target.closest === 'function') {
           if (target.closest('.system-canvas-node')) return false
+          if (target.closest('.system-canvas-resize-handles')) return false
         }
         return true
       })
@@ -128,11 +129,11 @@ export function useViewport(options: UseViewportOptions): UseViewportResult {
       const nodeCx = node.x + node.width / 2
       const nodeCy = node.y + node.height / 2
 
-      // Zoom level: fit the node with generous padding, but cap at 2x
-      const padding = 100
+      // Zoom level: fit the node with modest padding, but cap at 3x
+      const padding = 40
       const scaleX = rect.width / (node.width + padding * 2)
       const scaleY = rect.height / (node.height + padding * 2)
-      const targetZoom = Math.min(scaleX, scaleY, 2)
+      const targetZoom = Math.min(scaleX, scaleY, 3)
 
       const t = zoomIdentity
         .translate(rect.width / 2 - nodeCx * targetZoom, rect.height / 2 - nodeCy * targetZoom)

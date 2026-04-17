@@ -17,6 +17,7 @@ import { useViewport } from '../hooks/useViewport.js'
 import { NodeRenderer } from './NodeRenderer.js'
 import { EdgeRenderer } from './EdgeRenderer.js'
 import { NodeEditor } from './NodeEditor.js'
+import type { ResizeCorner, ResizeOverride } from '../hooks/useNodeResize.js'
 
 interface ViewportProps {
   nodes: ResolvedNode[]
@@ -42,6 +43,12 @@ interface ViewportProps {
   selectedId?: string | null
   editingId?: string | null
   dragOverrides?: Map<string, { x: number; y: number }>
+  resizeOverrides?: Map<string, ResizeOverride>
+  onResizeHandlePointerDown?: (
+    node: ResolvedNode,
+    corner: ResizeCorner,
+    event: React.PointerEvent
+  ) => void
   onEditorCommit?: (patch: NodeUpdate) => void
   onEditorCancel?: () => void
 }
@@ -77,6 +84,8 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
       selectedId,
       editingId,
       dragOverrides,
+      resizeOverrides,
+      onResizeHandlePointerDown,
       onEditorCommit,
       onEditorCancel,
     },
@@ -104,23 +113,29 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
       getViewport: () => viewport.current ?? { x: 0, y: 0, zoom: 1 },
     }))
 
-    // Apply drag overrides to nodes before rendering so edges route correctly.
+    // Apply drag + resize overrides to nodes before rendering so edges route correctly.
     const renderNodes = useMemo(() => {
-      if (!dragOverrides || dragOverrides.size === 0) return nodes
+      const hasDrag = dragOverrides && dragOverrides.size > 0
+      const hasResize = resizeOverrides && resizeOverrides.size > 0
+      if (!hasDrag && !hasResize) return nodes
       return nodes.map((n) => {
-        const o = dragOverrides.get(n.id)
-        return o ? { ...n, x: o.x, y: o.y } : n
+        const r = resizeOverrides?.get(n.id)
+        if (r) return { ...n, x: r.x, y: r.y, width: r.width, height: r.height }
+        const d = dragOverrides?.get(n.id)
+        return d ? { ...n, x: d.x, y: d.y } : n
       })
-    }, [nodes, dragOverrides])
+    }, [nodes, dragOverrides, resizeOverrides])
 
     const renderNodeMap = useMemo(() => {
-      if (!dragOverrides || dragOverrides.size === 0) return nodeMap
+      const hasDrag = dragOverrides && dragOverrides.size > 0
+      const hasResize = resizeOverrides && resizeOverrides.size > 0
+      if (!hasDrag && !hasResize) return nodeMap
       const m = new Map(nodeMap)
       for (const n of renderNodes) {
         m.set(n.id, n)
       }
       return m
-    }, [renderNodes, nodeMap, dragOverrides])
+    }, [renderNodes, nodeMap, dragOverrides, resizeOverrides])
 
     // Fit to content on initial render and when nodes change
     useEffect(() => {
@@ -199,6 +214,7 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
             onPointerDown={onNodePointerDown}
             selectedId={selectedId}
             editingId={editingId}
+            onResizeHandlePointerDown={onResizeHandlePointerDown}
           />
 
           {/* Inline editor on top of the edited node */}

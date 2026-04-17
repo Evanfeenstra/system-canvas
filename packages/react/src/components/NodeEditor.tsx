@@ -27,7 +27,9 @@ export function NodeEditor({ node, theme, onCommit, onCancel }: NodeEditorProps)
     const el = textareaRef.current ?? inputRef.current
     if (el) {
       el.focus()
-      el.select()
+      // Place cursor at end so user can append/edit without overwriting.
+      const end = el.value.length
+      el.setSelectionRange(end, end)
     }
   }, [])
 
