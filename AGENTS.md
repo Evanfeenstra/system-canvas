@@ -8,12 +8,13 @@ The library is **domain-agnostic**. It knows about canvases, nodes, edges, color
 
 ## Architecture
 
-This is an npm workspaces monorepo with two publishable packages and a demo app:
+This is an npm workspaces monorepo with three publishable packages and a demo app:
 
 ```
-packages/core/   → system-canvas        (pure TypeScript, zero dependencies)
-packages/react/  → system-canvas-react  (React components, depends on system-canvas + d3-zoom)
-demo/            → system-canvas-demo   (Vite + React demo app, not published)
+packages/core/        → system-canvas             (pure TypeScript, zero dependencies)
+packages/react/       → system-canvas-react       (React components, depends on system-canvas + d3-zoom)
+packages/standalone/  → system-canvas-standalone  (Self-contained IIFE bundle for <script> tag / CDN use)
+demo/                 → system-canvas-demo        (Vite + React demo app, not published)
 ```
 
 ### system-canvas (core)
@@ -21,7 +22,7 @@ demo/            → system-canvas-demo   (Vite + React demo app, not published)
 Pure TypeScript. No React, no DOM, no dependencies. Any framework adapter imports from here.
 
 - `src/types.ts` — All TypeScript interfaces. This is the source of truth for the data model.
-- `src/canvas.ts` — Canvas data helpers: resolve nodes, build lookup maps, validate, get labels, find group children, and editing helpers (`addNode`, `updateNode`, `removeNode`, `generateNodeId`, `getNodeMenuOptions`, `createNodeFromOption`).
+- `src/canvas.ts` — Canvas data helpers: resolve nodes, build lookup maps, validate, get labels, find group children, and editing helpers (`addNode`, `updateNode`, `removeNode`, `addEdge`, `updateEdge`, `removeEdge`, `generateNodeId`, `generateEdgeId`, `getNodeMenuOptions`, `createNodeFromOption`).
 - `src/themes/` — Five pre-made themes (dark, midnight, light, blueprint, warm) plus the resolver that merges partial themes and resolves colors/categories.
 - `src/rendering/` — Pure math: anchor point computation, edge path routing (bezier/straight/orthogonal), viewport transforms, bounding box calculation.
 
@@ -41,10 +42,24 @@ React bindings. Depends on `system-canvas` for all types and math.
 - `src/components/EdgeLabelEditor.tsx` — Inline edge label editor rendered via `<foreignObject>` centered on the edge midpoint.
 - `src/components/AddNodeButton.tsx` — Default floating "+" FAB and add-node popover menu.
 - `src/components/Breadcrumbs.tsx` — Navigation breadcrumb trail overlay.
-- `src/hooks/useViewport.ts` — d3-zoom integration, fit-to-content. Rejects pan gestures originating inside `.system-canvas-node` so node drags don't also pan.
+- `src/hooks/useViewport.ts` — d3-zoom integration, fit-to-content. Rejects pan gestures originating inside `.system-canvas-node`, `.system-canvas-resize-handles`, or `.system-canvas-connection-handles` so node/resize/edge-create drags don't also pan.
 - `src/hooks/useNavigation.ts` — Ref-stack breadcrumb state; prefers the synchronous `canvases` map when present, falls back to `onResolveCanvas` with an internal async cache.
-- `src/hooks/useCanvasInteraction.ts` — Click, double-click, navigate, and context menu handler wiring.
+- `src/hooks/useCanvasInteraction.ts` — Click, double-click, navigate, and context menu handler wiring for both nodes and edges; owns the "clicking one clears selection of the other" rule in editable mode.
 - `src/hooks/useNodeDrag.ts` — Pointer-event drag with group-children-follow; drag overrides are cleared on pointerup.
+- `src/hooks/useNodeResize.ts` — Pointer-event resize from the four corner handles of a selected node; resize overrides are cleared on pointerup.
+- `src/hooks/useEdgeCreate.ts` — Manages the pending-edge drag: source node/side, cursor in canvas-space, live drop-target hit-test (groups excluded); builds a new `CanvasEdge` and fires `onCreate` on release over a valid target.
+
+### system-canvas-standalone
+
+Self-contained IIFE bundle for drop-in `<script>` tag use from a CDN. Bundles React, ReactDOM, d3-zoom, system-canvas, and system-canvas-react into a single file that exposes a `window.SystemCanvas` global. Built with [tsup](https://tsup.egoist.dev/) (esbuild).
+
+- `src/index.tsx` — Thin wrapper. Exports `render(element, options)` which `createRoot`s the element and renders `<SystemCanvas>` with auto-managed internal state. All six mutation callbacks (`onNodeAdd`, `onNodeUpdate`, etc.) are wired internally to the core helpers (`addNode`, `updateNode`, etc.) so consumers don't have to manage `CanvasData` themselves. Consumer callbacks (if provided) are still invoked for observation.
+- `tsup.config.ts` — Emits three bundles: `system-canvas.js` (unminified IIFE), `system-canvas.min.js` (minified IIFE, ~90 KB gzipped), and `system-canvas.esm.js` (with `.d.ts`) for bundler consumers.
+- `examples/cdn.html` — Reference page showing `<script>` tag usage with theme switching and canvas editing.
+
+The returned `StandaloneInstance` exposes `getCanvas()`, `getCanvases()`, `setCanvas(c)`, `setCanvasesMap(m)`, `update(partial)` (swap any options like theme/editable without remount), `on('change', cb)`, and `destroy()`. `update()` is the preferred way to mutate props post-mount; avoid `destroy` + re-`render` on the same element because React may race its async unmount against the new root.
+
+Themes can be passed as an object, a `Partial<CanvasTheme>` override, or a string name (`'dark' | 'midnight' | 'light' | 'blueprint' | 'warm'`). The wrapper also re-exports `themes` on the global so users can do `SystemCanvas.themes.midnight` for advanced composition.
 
 ## Key concepts
 
@@ -86,7 +101,7 @@ Editing UI:
 - **Drag**: pointer-event drag on any node. Dragging a group moves its spatially-contained children (computed once at drag-start via `getGroupChildren`). Drag overrides are local to the library and cleared on pointerup; the committed position flows through `onNodeUpdate`.
 - **Edit**: double-click any node opens an inline editor in a `<foreignObject>` — `<textarea>` for `text`, `<input>` for `file` / `link` / `group`. Enter commits, Escape cancels.
 - **Edges**: single-click selects an edge (thicker, high-contrast stroke). Double-click opens an inline label editor (`<foreignObject>` centered on the edge midpoint). Selecting an edge clears any node selection and vice versa. `onEdgeClick` always fires — in editable mode, selection happens alongside.
-- **Connect**: hovering a node in editable mode reveals four connection handles (one per side). Dragging from a handle to another node creates a new edge, firing `onEdgeAdd(edge, canvasRef)`. The new edge's `fromSide` is set to the handle that was grabbed; `toSide` is left undefined so the renderer auto-routes. Releasing over empty space cancels silently. A ghost edge (`PendingEdgeRenderer`) tracks the cursor during the drag; the hovered drop target gets a highlight halo.
+- **Connect**: hovering a node in editable mode reveals four connection handles (one per side, fading in after ~300ms to avoid flashing on mouse fly-throughs). Dragging from a handle to another node creates a new edge, firing `onEdgeAdd(edge, canvasRef)`. The new edge's `fromSide` is set to the handle that was grabbed; `toSide` is left undefined so the renderer auto-routes. Releasing over empty space cancels silently. A ghost edge (`PendingEdgeRenderer`) tracks the cursor during the drag; the hovered drop target gets a highlight halo. **Groups are excluded** from both hover hit-testing and drop-target hit-testing — they never expose handles and cannot be edge endpoints through this UI.
 - **Delete**: single-click selects (dashed outline for nodes, highlighted stroke for edges). The outer `<div>` has `tabIndex={0}` so Delete/Backspace fires `onNodeDelete` or `onEdgeDelete` depending on what's selected. Keys are scoped to the canvas — no window listener.
 - **Pan vs. drag**: d3-zoom's `.filter()` rejects any gesture whose target is inside `.system-canvas-node`, so node drags never double as canvas pans. Background drags still pan normally.
 
@@ -108,11 +123,12 @@ SVG paint order (painter's model, later = on top): **groups → edges → non-gr
 ## Commands
 
 ```bash
-npm run build          # Build both packages (core first, then react)
-npm run build:core     # Build system-canvas only
-npm run build:react    # Build system-canvas-react only
-npm run dev            # Start the Vite demo app at localhost:5173
-npm run typecheck      # Type-check all workspaces
+npm run build            # Build all packages (core → react → standalone)
+npm run build:core       # Build system-canvas only
+npm run build:react      # Build system-canvas-react only
+npm run build:standalone # Build system-canvas-standalone (IIFE + ESM bundles)
+npm run dev              # Start the Vite demo app at localhost:5173
+npm run typecheck        # Type-check all workspaces
 ```
 
 ## Code conventions

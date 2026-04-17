@@ -54,6 +54,7 @@ function App() {
 
 - **Pan and zoom** with mouse/trackpad (d3-zoom)
 - **Nested canvases** -- nodes with a `ref` property are clickable; clicking navigates to a sub-canvas with breadcrumb trail back
+- **Editable mode** -- add, drag, resize, inline-edit, and delete nodes; create edges by dragging between node border handles; inline-edit edge labels; Delete/Backspace removes selected nodes or edges
 - **5 built-in themes** -- dark, midnight, light, blueprint, warm
 - **3 edge routing modes** -- bezier, straight, orthogonal
 - **Categories** -- define reusable node styles (dimensions, colors, icons) in the theme
@@ -88,6 +89,47 @@ Nodes with a `ref` property become navigable. Provide an `onResolveCanvas` callb
   }}
 />
 ```
+
+## Editing
+
+Pass `editable` and wire the granular mutation callbacks. The library is stateless -- you own `CanvasData` and pass it back on every render. Core helpers do the immutable merge for you:
+
+```tsx
+import { useState } from 'react'
+import { SystemCanvas } from 'system-canvas-react'
+import {
+  addNode, updateNode, removeNode,
+  addEdge, updateEdge, removeEdge,
+} from 'system-canvas'
+import type { CanvasData } from 'system-canvas'
+
+function App() {
+  const [canvas, setCanvas] = useState<CanvasData>(initial)
+
+  return (
+    <SystemCanvas
+      canvas={canvas}
+      editable
+      onNodeAdd={(node) => setCanvas((c) => addNode(c, node))}
+      onNodeUpdate={(id, patch) => setCanvas((c) => updateNode(c, id, patch))}
+      onNodeDelete={(id) => setCanvas((c) => removeNode(c, id))}
+      onEdgeAdd={(edge) => setCanvas((c) => addEdge(c, edge))}
+      onEdgeUpdate={(id, patch) => setCanvas((c) => updateEdge(c, id, patch))}
+      onEdgeDelete={(id) => setCanvas((c) => removeEdge(c, id))}
+    />
+  )
+}
+```
+
+Every editing callback receives a third `canvasRef: string | undefined` argument identifying which canvas the change belongs to (`undefined` at the root). When `editable` is enabled with sub-canvases, pass a synchronous `canvases: Record<string, CanvasData>` map so edits to sub-canvases are observable by the library.
+
+Interactions in editable mode:
+
+- **Drag** nodes to move them; dragging a group moves its spatially-contained children.
+- **Resize** the selected node via the four corner handles.
+- **Double-click** a node to inline-edit its text/file/link/label; **double-click** an edge to inline-edit its label.
+- **Hover** a node to reveal four connection handles (one per side); **drag** from a handle to another node to create an edge. Groups don't participate in edge creation.
+- **Click** to select, **Delete** or **Backspace** to remove the selected node or edge. **Escape** clears selection.
 
 ## Props
 

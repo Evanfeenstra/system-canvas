@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>system-canvas standalone demo</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background: #0a0a0a;
+        font-family: system-ui, sans-serif;
+      }
+      #app {
+        width: 100vw;
+        height: 100vh;
+      }
+      .toolbar {
+        position: fixed;
+        top: 12px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 100;
+        display: flex;
+        gap: 8px;
+        padding: 6px 10px;
+        background: rgba(20, 20, 24, 0.85);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+        backdrop-filter: blur(8px);
+      }
+      .toolbar button {
+        background: transparent;
+        color: #e4e4e7;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .toolbar button:hover {
+        background: rgba(255, 255, 255, 0.06);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="toolbar">
+      <button id="theme-dark">Dark</button>
+      <button id="theme-midnight">Midnight</button>
+      <button id="theme-light">Light</button>
+      <button id="theme-blueprint">Blueprint</button>
+      <button id="theme-warm">Warm</button>
+      <button id="toggle-edit">Toggle editable</button>
+      <button id="export">Log canvas</button>
+    </div>
+
+    <div id="app"></div>
+
+    <!--
+      For production CDN use (once published):
+        <script src="https://unpkg.com/system-canvas-standalone@0.1/dist/system-canvas.min.js"></script>
+      For local development, point at the relative build output:
+    -->
+    <script src="../dist/system-canvas.min.js"></script>
+
+    <script>
+      const canvas = {
+        nodes: [
+          {
+            id: 'frontend',
+            type: 'text',
+            text: 'Web App\nReact + Vite',
+            x: 0,
+            y: 0,
+            width: 160,
+            height: 70,
+            color: '4',
+          },
+          {
+            id: 'api',
+            type: 'text',
+            text: 'API Gateway\nKong',
+            x: 260,
+            y: 0,
+            width: 160,
+            height: 70,
+            color: '5',
+          },
+          {
+            id: 'auth',
+            type: 'text',
+            text: 'Auth Service',
+            x: 520,
+            y: -80,
+            width: 160,
+            height: 70,
+            color: '1',
+          },
+          {
+            id: 'users',
+            type: 'text',
+            text: 'User Service',
+            x: 520,
+            y: 80,
+            width: 160,
+            height: 70,
+            color: '2',
+          },
+          {
+            id: 'db',
+            type: 'text',
+            text: 'Postgres',
+            x: 780,
+            y: 0,
+            width: 160,
+            height: 70,
+            color: '6',
+          },
+        ],
+        edges: [
+          { id: 'e1', fromNode: 'frontend', toNode: 'api', label: 'HTTPS' },
+          { id: 'e2', fromNode: 'api', toNode: 'auth' },
+          { id: 'e3', fromNode: 'api', toNode: 'users' },
+          { id: 'e4', fromNode: 'auth', toNode: 'db' },
+          { id: 'e5', fromNode: 'users', toNode: 'db' },
+        ],
+      }
+
+      let editable = true
+
+      const instance = SystemCanvas.render(document.getElementById('app'), {
+        canvas,
+        theme: 'midnight',
+        editable,
+        onChange: (next) => {
+          console.log('canvas changed:', next)
+        },
+      })
+
+      for (const t of ['dark', 'midnight', 'light', 'blueprint', 'warm']) {
+        document.getElementById('theme-' + t).addEventListener('click', () => {
+          instance.update({ theme: t })
+        })
+      }
+
+      document.getElementById('toggle-edit').addEventListener('click', () => {
+        editable = !editable
+        instance.update({ editable })
+      })
+
+      document.getElementById('export').addEventListener('click', () => {
+        console.log(JSON.stringify(instance.getCanvas(), null, 2))
+      })
+    </script>
+  </body>
+</html>

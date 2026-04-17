@@ -6,9 +6,10 @@
     "demo"
   ],
   "scripts": {
-    "build": "npm run build:core && npm run build:react",
+    "build": "npm run build:core && npm run build:react && npm run build:standalone",
     "build:core": "npm run build -w system-canvas",
     "build:react": "npm run build -w system-canvas-react",
+    "build:standalone": "npm run build -w system-canvas-standalone",
     "dev": "npm run dev -w system-canvas-demo",
     "typecheck": "npm run typecheck --workspaces"
   },
