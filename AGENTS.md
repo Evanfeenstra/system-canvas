@@ -21,7 +21,7 @@ demo/            → system-canvas-demo   (Vite + React demo app, not published)
 Pure TypeScript. No React, no DOM, no dependencies. Any framework adapter imports from here.
 
 - `src/types.ts` — All TypeScript interfaces. This is the source of truth for the data model.
-- `src/canvas.ts` — Canvas data helpers: resolve nodes, build lookup maps, validate, get labels, find group children.
+- `src/canvas.ts` — Canvas data helpers: resolve nodes, build lookup maps, validate, get labels, find group children, and editing helpers (`addNode`, `updateNode`, `removeNode`, `generateNodeId`, `getNodeMenuOptions`, `createNodeFromOption`).
 - `src/themes/` — Five pre-made themes (dark, midnight, light, blueprint, warm) plus the resolver that merges partial themes and resolves colors/categories.
 - `src/rendering/` — Pure math: anchor point computation, edge path routing (bezier/straight/orthogonal), viewport transforms, bounding box calculation.
 
@@ -34,10 +34,14 @@ React bindings. Depends on `system-canvas` for all types and math.
 - `src/components/NodeRenderer.tsx` — Dispatches to type-specific node components. Groups render first (lower z-index).
 - `src/components/TextNode.tsx`, `FileNode.tsx`, `LinkNode.tsx`, `GroupNode.tsx` — One component per JSON Canvas node type.
 - `src/components/EdgeRenderer.tsx` — Renders all edges with arrowhead markers, labels, and click targets.
+- `src/components/RefIndicator.tsx` — Clickable "enter sub-canvas" corner drawn on navigable nodes.
+- `src/components/NodeEditor.tsx` — Inline editor rendered via `<foreignObject>` for text/file/link/group fields.
+- `src/components/AddNodeButton.tsx` — Default floating "+" FAB and add-node popover menu.
 - `src/components/Breadcrumbs.tsx` — Navigation breadcrumb trail overlay.
-- `src/hooks/useViewport.ts` — d3-zoom integration, fit-to-content.
-- `src/hooks/useNavigation.ts` — Canvas stack, ref resolution, breadcrumb state management.
-- `src/hooks/useCanvasInteraction.ts` — Click, double-click, and context menu handler wiring.
+- `src/hooks/useViewport.ts` — d3-zoom integration, fit-to-content. Rejects pan gestures originating inside `.system-canvas-node` so node drags don't also pan.
+- `src/hooks/useNavigation.ts` — Ref-stack breadcrumb state; prefers the synchronous `canvases` map when present, falls back to `onResolveCanvas` with an internal async cache.
+- `src/hooks/useCanvasInteraction.ts` — Click, double-click, navigate, and context menu handler wiring.
+- `src/hooks/useNodeDrag.ts` — Pointer-event drag with group-children-follow; drag overrides are cleared on pointerup.
 
 ## Key concepts
 
@@ -45,12 +49,38 @@ React bindings. Depends on `system-canvas` for all types and math.
 
 We extend the [JSON Canvas spec](https://jsoncanvas.org) with two optional fields on nodes:
 
-- **`ref`** (string) — A URI pointing to a sub-canvas. Any node type can have a ref. Nodes with refs are "navigable" — clicking them loads the referenced canvas via the `onResolveCanvas` callback.
-- **`category`** (string) — Maps to a `CategoryDefinition` in the theme. Provides default width, height, fill, stroke, corner radius, and icon. When `category` is set, `width` and `height` become optional.
+- **`ref`** (string) — A URI pointing to a sub-canvas. Any node type can have a ref. Nodes with refs are "navigable" — the carved corner indicator on the node navigates via the `onResolveCanvas` callback or a synchronous `canvases` map.
+- **`category`** (string) — Maps to a `CategoryDefinition` in the theme. Provides default width, height, fill, stroke, corner radius, icon, and an optional `type` (the JSON Canvas node type a category creates from the add-node menu; defaults to `text`). When `category` is set, `width` and `height` become optional.
 
 ### Navigation model
 
-Navigation is discrete, not continuous zoom. Clicking a navigable node pushes a new canvas onto a breadcrumb stack. The library calls `onResolveCanvas(ref)` to fetch the sub-canvas data. Breadcrumbs allow navigating back up.
+Navigation is discrete, not continuous zoom. Navigable nodes render a clickable **carved corner** (bottom-right for text/file/link, top-right for groups) that continues the node's own stroke to form a small square containing an arrow/chevron. Clicking that corner pushes a new canvas onto a breadcrumb stack.
+
+Clicking the node body itself never navigates — it fires `onNodeClick` and (in editable mode) selects the node. Double-clicking a node always opens the inline editor in editable mode.
+
+Two resolution paths for sub-canvas data (in priority order):
+1. **`canvases` prop** — a synchronous `Record<string, CanvasData>`. Always preferred when a ref is present in the map. Required for `editable` mode so consumer-side edits to sub-canvases are observable by the library.
+2. **`onResolveCanvas(ref)`** — async callback. Results are cached internally by ref. Used as a fallback when `canvases` lacks the ref.
+
+Breadcrumbs allow navigating back up. The library exposes `currentCanvasRef` (the ref of the currently-viewed canvas, `undefined` at root) so editing callbacks can identify which entry in the consumer's canvases map to mutate.
+
+### Editing model
+
+The library is stateless with respect to canvas data. When `editable` is true, it emits granular mutation callbacks; the consumer owns `CanvasData` and passes the updated object back as the `canvas` prop (or via the `canvases` map for sub-canvases).
+
+Callbacks (all receive `canvasRef: string | undefined` — the ref of the canvas the node lives on, or `undefined` for the root):
+- `onNodeAdd(node, canvasRef)` — fired when the user picks an option from the add-node menu.
+- `onNodeUpdate(nodeId, patch, canvasRef)` — fired after drags and editor commits. `patch: NodeUpdate` is `Partial<Omit<CanvasNode, 'id' | 'type'>>`.
+- `onNodeDelete(nodeId, canvasRef)` — fired when the user presses Delete/Backspace with a selected node.
+
+Consumers typically implement these by calling the core helpers `addNode / updateNode / removeNode` on their own `Record<string, CanvasData>` map.
+
+Editing UI:
+- **Add**: a floating "+" button opens a popover listing categories (with color swatch + icon) above base JSON Canvas types. Fully replaceable via the `renderAddNodeButton` render prop.
+- **Drag**: pointer-event drag on any node. Dragging a group moves its spatially-contained children (computed once at drag-start via `getGroupChildren`). Drag overrides are local to the library and cleared on pointerup; the committed position flows through `onNodeUpdate`.
+- **Edit**: double-click any node opens an inline editor in a `<foreignObject>` — `<textarea>` for `text`, `<input>` for `file` / `link` / `group`. Enter commits, Escape cancels.
+- **Delete**: single-click selects (dashed outline). The outer `<div>` has `tabIndex={0}` so Delete/Backspace fires `onNodeDelete`. Keys are scoped to the canvas — no window listener.
+- **Pan vs. drag**: d3-zoom's `.filter()` rejects any gesture whose target is inside `.system-canvas-node`, so node drags never double as canvas pans. Background drags still pan normally.
 
 ### Theme system
 
