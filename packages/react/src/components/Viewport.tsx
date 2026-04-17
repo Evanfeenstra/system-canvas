@@ -1,14 +1,22 @@
-import React, { useEffect, useImperativeHandle, useRef, forwardRef } from 'react'
+import React, {
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  forwardRef,
+} from 'react'
 import type {
   CanvasEdge,
   ResolvedNode,
   CanvasTheme,
   EdgeStyle,
   ViewportState,
+  NodeUpdate,
 } from 'system-canvas'
 import { useViewport } from '../hooks/useViewport.js'
 import { NodeRenderer } from './NodeRenderer.js'
 import { EdgeRenderer } from './EdgeRenderer.js'
+import { NodeEditor } from './NodeEditor.js'
 
 interface ViewportProps {
   nodes: ResolvedNode[]
@@ -22,15 +30,27 @@ interface ViewportProps {
   onViewportChange?: (viewport: ViewportState) => void
   onNodeClick: (node: ResolvedNode, event: React.MouseEvent) => void
   onNodeDoubleClick: (node: ResolvedNode, event: React.MouseEvent) => void
+  onNodeNavigate: (node: ResolvedNode, event: React.MouseEvent) => void
   onEdgeClick: (edge: CanvasEdge, event: React.MouseEvent) => void
+  onCanvasClick?: (event: React.MouseEvent) => void
   onCanvasContextMenu: (event: React.MouseEvent) => void
   onNodeContextMenu: (node: ResolvedNode, event: React.MouseEvent) => void
   onEdgeContextMenu: (edge: CanvasEdge, event: React.MouseEvent) => void
+
+  // Editable
+  onNodePointerDown?: (node: ResolvedNode, event: React.PointerEvent) => void
+  selectedId?: string | null
+  editingId?: string | null
+  dragOverrides?: Map<string, { x: number; y: number }>
+  onEditorCommit?: (patch: NodeUpdate) => void
+  onEditorCancel?: () => void
 }
 
 export interface ViewportHandle {
   zoomToNode: (node: ResolvedNode, onComplete?: () => void) => void
   fitToContent: (nodes: ResolvedNode[], animate?: boolean) => void
+  getSvgElement: () => SVGSVGElement | null
+  getViewport: () => ViewportState
 }
 
 export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
@@ -47,10 +67,18 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
       onViewportChange,
       onNodeClick,
       onNodeDoubleClick,
+      onNodeNavigate,
       onEdgeClick,
+      onCanvasClick,
       onCanvasContextMenu,
       onNodeContextMenu,
       onEdgeContextMenu,
+      onNodePointerDown,
+      selectedId,
+      editingId,
+      dragOverrides,
+      onEditorCommit,
+      onEditorCancel,
     },
     ref
   ) {
@@ -72,7 +100,27 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
         zoomToNode(node, onComplete)
       },
       fitToContent,
+      getSvgElement: () => svgRef.current,
+      getViewport: () => viewport.current ?? { x: 0, y: 0, zoom: 1 },
     }))
+
+    // Apply drag overrides to nodes before rendering so edges route correctly.
+    const renderNodes = useMemo(() => {
+      if (!dragOverrides || dragOverrides.size === 0) return nodes
+      return nodes.map((n) => {
+        const o = dragOverrides.get(n.id)
+        return o ? { ...n, x: o.x, y: o.y } : n
+      })
+    }, [nodes, dragOverrides])
+
+    const renderNodeMap = useMemo(() => {
+      if (!dragOverrides || dragOverrides.size === 0) return nodeMap
+      const m = new Map(nodeMap)
+      for (const n of renderNodes) {
+        m.set(n.id, n)
+      }
+      return m
+    }, [renderNodes, nodeMap, dragOverrides])
 
     // Fit to content on initial render and when nodes change
     useEffect(() => {
@@ -85,6 +133,10 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
       }
     }, [nodes, fitToContent, defaultViewport])
 
+    const editingNode = editingId
+      ? renderNodes.find((n) => n.id === editingId) ?? null
+      : null
+
     return (
       <svg
         ref={svgRef}
@@ -95,6 +147,7 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
           display: 'block',
           background: theme.background,
         }}
+        onClick={onCanvasClick}
         onContextMenu={onCanvasContextMenu}
       >
         {/* Grid pattern */}
@@ -128,7 +181,7 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
           {/* Edges first (behind nodes in painter's model) */}
           <EdgeRenderer
             edges={edges}
-            nodeMap={nodeMap}
+            nodeMap={renderNodeMap}
             theme={theme}
             defaultEdgeStyle={edgeStyle}
             onClick={onEdgeClick}
@@ -137,12 +190,26 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
 
           {/* Nodes on top */}
           <NodeRenderer
-            nodes={nodes}
+            nodes={renderNodes}
             theme={theme}
             onClick={onNodeClick}
             onDoubleClick={onNodeDoubleClick}
             onContextMenu={onNodeContextMenu}
+            onNavigate={onNodeNavigate}
+            onPointerDown={onNodePointerDown}
+            selectedId={selectedId}
+            editingId={editingId}
           />
+
+          {/* Inline editor on top of the edited node */}
+          {editingNode && onEditorCommit && onEditorCancel && (
+            <NodeEditor
+              node={editingNode}
+              theme={theme}
+              onCommit={onEditorCommit}
+              onCancel={onEditorCancel}
+            />
+          )}
         </g>
       </svg>
     )

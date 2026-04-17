@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react'
+import { useCallback } from 'react'
 import type {
   CanvasNode,
   CanvasEdge,
@@ -13,18 +13,26 @@ interface UseCanvasInteractionOptions {
   onNodeDoubleClick?: (node: CanvasNode) => void
   onEdgeClick?: (edge: CanvasEdge) => void
   onContextMenu?: (event: ContextMenuEvent) => void
-  /** Called when a navigable node (has ref) is clicked */
+  /** Called when a navigable node (has ref) is clicked to initiate navigation */
   onNavigableNodeClick?: (node: ResolvedNode) => void
   viewport: React.RefObject<ViewportState>
+
+  // Editable-mode extensions
+  editable?: boolean
+  onSelect?: (nodeId: string | null) => void
+  onBeginEdit?: (node: ResolvedNode) => void
 }
 
 interface UseCanvasInteractionResult {
   handleNodeClick: (node: ResolvedNode, event: React.MouseEvent) => void
   handleNodeDoubleClick: (node: ResolvedNode, event: React.MouseEvent) => void
+  handleNodeNavigate: (node: ResolvedNode, event: React.MouseEvent) => void
   handleEdgeClick: (edge: CanvasEdge, event: React.MouseEvent) => void
   handleCanvasContextMenu: (event: React.MouseEvent) => void
   handleNodeContextMenu: (node: ResolvedNode, event: React.MouseEvent) => void
   handleEdgeContextMenu: (edge: CanvasEdge, event: React.MouseEvent) => void
+  /** Background click — clears selection */
+  handleCanvasClick: (event: React.MouseEvent) => void
 }
 
 export function useCanvasInteraction(
@@ -37,25 +45,40 @@ export function useCanvasInteraction(
     onContextMenu,
     onNavigableNodeClick,
     viewport,
+    editable,
+    onSelect,
+    onBeginEdit,
   } = options
 
   const handleNodeClick = useCallback(
     (node: ResolvedNode, event: React.MouseEvent) => {
       event.stopPropagation()
-      if (node.isNavigable) {
-        onNavigableNodeClick?.(node)
+      if (editable) {
+        onSelect?.(node.id)
       }
       onNodeClick?.(node)
     },
-    [onNodeClick, onNavigableNodeClick]
+    [editable, onNodeClick, onSelect]
   )
 
   const handleNodeDoubleClick = useCallback(
     (node: ResolvedNode, event: React.MouseEvent) => {
       event.stopPropagation()
       onNodeDoubleClick?.(node)
+      if (editable) {
+        onBeginEdit?.(node)
+      }
     },
-    [onNodeDoubleClick]
+    [editable, onNodeDoubleClick, onBeginEdit]
+  )
+
+  const handleNodeNavigate = useCallback(
+    (node: ResolvedNode, _event: React.MouseEvent) => {
+      if (node.isNavigable) {
+        onNavigableNodeClick?.(node)
+      }
+    },
+    [onNavigableNodeClick]
   )
 
   const handleEdgeClick = useCallback(
@@ -112,12 +135,23 @@ export function useCanvasInteraction(
     [createContextMenuHandler]
   )
 
+  const handleCanvasClick = useCallback(
+    (_event: React.MouseEvent) => {
+      if (editable) {
+        onSelect?.(null)
+      }
+    },
+    [editable, onSelect]
+  )
+
   return {
     handleNodeClick,
     handleNodeDoubleClick,
+    handleNodeNavigate,
     handleEdgeClick,
     handleCanvasContextMenu,
     handleNodeContextMenu,
     handleEdgeContextMenu,
+    handleCanvasClick,
   }
 }

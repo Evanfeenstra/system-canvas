@@ -1,4 +1,13 @@
-import type { CanvasData, CanvasNode, CanvasEdge, ResolvedNode, CanvasTheme } from './types.js'
+import type {
+  CanvasData,
+  CanvasNode,
+  CanvasEdge,
+  ResolvedNode,
+  CanvasTheme,
+  NodeUpdate,
+  NodeMenuOption,
+  NodeType,
+} from './types.js'
 import { resolveNode } from './themes/resolve.js'
 
 /**
@@ -102,4 +111,152 @@ export function validateCanvas(canvas: CanvasData): string[] {
   }
 
   return errors
+}
+
+// ---------------------------------------------------------------------------
+// Editing helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Generate a unique node id. Uses crypto.randomUUID() when available,
+ * else falls back to a random base36 string.
+ */
+export function generateNodeId(): string {
+  const g: any = globalThis as any
+  if (g.crypto?.randomUUID) {
+    return g.crypto.randomUUID()
+  }
+  return (
+    'n_' +
+    Math.random().toString(36).slice(2, 10) +
+    Math.random().toString(36).slice(2, 6)
+  )
+}
+
+/**
+ * Build the list of options that should appear in the add-node menu:
+ * first every merged category (theme + canvas-level) with its visual
+ * treatment, then the four base JSON Canvas node types.
+ */
+export function getNodeMenuOptions(
+  canvas: CanvasData,
+  theme: CanvasTheme
+): NodeMenuOption[] {
+  const mergedCategories = {
+    ...theme.categories,
+    ...(canvas.theme?.categories ?? {}),
+  }
+
+  const categoryOptions: NodeMenuOption[] = Object.entries(mergedCategories).map(
+    ([key, def]) => ({
+      kind: 'category',
+      value: key,
+      label: key,
+      icon: def.icon ?? null,
+      fill: def.fill,
+      stroke: def.stroke,
+      nodeType: def.type ?? 'text',
+    })
+  )
+
+  const baseTypes: NodeType[] = ['text', 'file', 'link', 'group']
+  const typeOptions: NodeMenuOption[] = baseTypes.map((t) => ({
+    kind: 'type',
+    value: t,
+    label: t,
+    nodeType: t,
+  }))
+
+  return [...categoryOptions, ...typeOptions]
+}
+
+/**
+ * Build a new CanvasNode for the given menu option at (x, y).
+ * Dimensions come from the theme category when applicable; otherwise
+ * sensible defaults are used.
+ */
+export function createNodeFromOption(
+  option: NodeMenuOption,
+  x: number,
+  y: number,
+  id: string = generateNodeId()
+): CanvasNode {
+  const base: CanvasNode = {
+    id,
+    type: option.nodeType,
+    x,
+    y,
+  }
+
+  if (option.kind === 'category') {
+    base.category = option.value
+  }
+
+  // Provide reasonable type-specific starter content / dimensions.
+  switch (option.nodeType) {
+    case 'text':
+      base.text = base.text ?? 'New node'
+      if (option.kind === 'type') {
+        base.width = 140
+        base.height = 60
+      }
+      break
+    case 'file':
+      base.file = ''
+      if (option.kind === 'type') {
+        base.width = 200
+        base.height = 60
+      }
+      break
+    case 'link':
+      base.url = ''
+      if (option.kind === 'type') {
+        base.width = 200
+        base.height = 60
+      }
+      break
+    case 'group':
+      base.label = option.kind === 'category' ? option.value : 'New group'
+      if (option.kind === 'type') {
+        base.width = 300
+        base.height = 200
+      }
+      break
+  }
+
+  return base
+}
+
+/** Append a node to a canvas, returning a new CanvasData. */
+export function addNode(canvas: CanvasData, node: CanvasNode): CanvasData {
+  return {
+    ...canvas,
+    nodes: [...(canvas.nodes ?? []), node],
+  }
+}
+
+/** Patch a node by id. Returns the same reference if the node is not found. */
+export function updateNode(
+  canvas: CanvasData,
+  nodeId: string,
+  patch: NodeUpdate
+): CanvasData {
+  const nodes = canvas.nodes ?? []
+  let changed = false
+  const next = nodes.map((n) => {
+    if (n.id !== nodeId) return n
+    changed = true
+    return { ...n, ...patch }
+  })
+  if (!changed) return canvas
+  return { ...canvas, nodes: next }
+}
+
+/** Remove a node AND any edges that reference it. */
+export function removeNode(canvas: CanvasData, nodeId: string): CanvasData {
+  const nodes = (canvas.nodes ?? []).filter((n) => n.id !== nodeId)
+  const edges = (canvas.edges ?? []).filter(
+    (e) => e.fromNode !== nodeId && e.toNode !== nodeId
+  )
+  return { ...canvas, nodes, edges }
 }

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useMemo } from 'react'
 import type { CanvasData, CanvasNode, BreadcrumbEntry } from 'system-canvas'
 import { getNodeLabel } from 'system-canvas'
 
@@ -7,7 +7,13 @@ interface UseNavigationOptions {
   rootCanvas: CanvasData
   /** Root label for breadcrumbs */
   rootLabel?: string
-  /** Resolve a ref string to canvas data */
+  /**
+   * Synchronous map from ref to CanvasData. When present, the hook prefers
+   * this over cached async results, so consumer-side edits to sub-canvases
+   * are reflected immediately.
+   */
+  canvases?: Record<string, CanvasData>
+  /** Resolve a ref string to canvas data (async fallback) */
   onResolveCanvas?: (ref: string) => Promise<CanvasData>
   /** Called when navigation occurs */
   onNavigate?: (ref: string) => void
@@ -15,16 +21,11 @@ interface UseNavigationOptions {
   onBreadcrumbClick?: (index: number) => void
 }
 
-interface NavigationState {
-  canvas: CanvasData
-  breadcrumbs: BreadcrumbEntry[]
-  isLoading: boolean
-  error: string | null
-}
-
 interface UseNavigationResult {
   /** Current canvas to render */
   canvas: CanvasData
+  /** Ref of the current canvas (undefined at root) */
+  currentCanvasRef: string | undefined
   /** Current breadcrumb trail */
   breadcrumbs: BreadcrumbEntry[]
   /** Whether a canvas is currently being loaded */
@@ -35,85 +36,99 @@ interface UseNavigationResult {
   navigateToRef: (node: CanvasNode) => Promise<void>
   /** Navigate back to a breadcrumb */
   navigateToBreadcrumb: (index: number) => void
-  /** Replace the current canvas (for external state management) */
-  setCanvas: (canvas: CanvasData) => void
 }
 
 export function useNavigation(options: UseNavigationOptions): UseNavigationResult {
   const {
     rootCanvas,
     rootLabel = 'Home',
+    canvases,
     onResolveCanvas,
     onNavigate,
     onBreadcrumbClick,
   } = options
 
-  const [state, setState] = useState<NavigationState>({
-    canvas: rootCanvas,
-    breadcrumbs: [{ label: rootLabel }],
-    isLoading: false,
-    error: null,
-  })
+  // Breadcrumb stack — we only track labels and refs; canvas data is looked
+  // up each render from `canvases` or the async cache.
+  const [breadcrumbs, setBreadcrumbs] = useState<BreadcrumbEntry[]>([
+    { label: rootLabel },
+  ])
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  // Keep a stack of canvases so we can navigate back without re-fetching
-  const [canvasStack, setCanvasStack] = useState<CanvasData[]>([rootCanvas])
+  // Async cache: ref -> last-fetched CanvasData. Used only when `canvases`
+  // doesn't contain the ref.
+  const asyncCacheRef = useRef<Map<string, CanvasData>>(new Map())
+  // Bump to force recompute when async cache updates.
+  const [, setCacheVersion] = useState(0)
+
+  const currentRef = breadcrumbs.length > 1
+    ? breadcrumbs[breadcrumbs.length - 1].ref
+    : undefined
+
+  const canvas = useMemo<CanvasData>(() => {
+    if (!currentRef) return rootCanvas
+    const fromProp = canvases?.[currentRef]
+    if (fromProp) return fromProp
+    const fromCache = asyncCacheRef.current.get(currentRef)
+    if (fromCache) return fromCache
+    // No data yet (still loading) — fall back to an empty canvas so the
+    // renderer has something valid to work with.
+    return { nodes: [], edges: [] }
+  }, [rootCanvas, canvases, currentRef])
 
   const navigateToRef = useCallback(
     async (node: CanvasNode) => {
-      if (!node.ref || !onResolveCanvas) return
+      if (!node.ref) return
 
-      onNavigate?.(node.ref)
+      const ref = node.ref
+      onNavigate?.(ref)
+      const label = getNodeLabel(node)
 
-      setState((prev) => ({ ...prev, isLoading: true, error: null }))
+      // Synchronous path: data already available.
+      if (canvases?.[ref] || asyncCacheRef.current.has(ref)) {
+        setBreadcrumbs((prev) => [...prev, { label, ref }])
+        setError(null)
+        return
+      }
 
+      if (!onResolveCanvas) {
+        setError(`No data for ref "${ref}" and no resolver configured`)
+        return
+      }
+
+      setIsLoading(true)
+      setError(null)
       try {
-        const childCanvas = await onResolveCanvas(node.ref)
-        const label = getNodeLabel(node)
-
-        setCanvasStack((prev) => [...prev, childCanvas])
-        setState((prev) => ({
-          canvas: childCanvas,
-          breadcrumbs: [...prev.breadcrumbs, { label, ref: node.ref }],
-          isLoading: false,
-          error: null,
-        }))
+        const childCanvas = await onResolveCanvas(ref)
+        asyncCacheRef.current.set(ref, childCanvas)
+        setCacheVersion((v) => v + 1)
+        setBreadcrumbs((prev) => [...prev, { label, ref }])
       } catch (err) {
-        setState((prev) => ({
-          ...prev,
-          isLoading: false,
-          error: err instanceof Error ? err.message : 'Failed to load canvas',
-        }))
+        setError(err instanceof Error ? err.message : 'Failed to load canvas')
+      } finally {
+        setIsLoading(false)
       }
     },
-    [onResolveCanvas, onNavigate]
+    [canvases, onResolveCanvas, onNavigate]
   )
 
   const navigateToBreadcrumb = useCallback(
     (index: number) => {
       onBreadcrumbClick?.(index)
-
-      setCanvasStack((prev) => prev.slice(0, index + 1))
-      setState((prev) => ({
-        canvas: canvasStack[index],
-        breadcrumbs: prev.breadcrumbs.slice(0, index + 1),
-        isLoading: false,
-        error: null,
-      }))
+      setBreadcrumbs((prev) => prev.slice(0, index + 1))
+      setError(null)
     },
-    [canvasStack, onBreadcrumbClick]
+    [onBreadcrumbClick]
   )
 
-  const setCanvas = useCallback((canvas: CanvasData) => {
-    setState((prev) => ({ ...prev, canvas }))
-  }, [])
-
   return {
-    canvas: state.canvas,
-    breadcrumbs: state.breadcrumbs,
-    isLoading: state.isLoading,
-    error: state.error,
+    canvas,
+    currentCanvasRef: currentRef,
+    breadcrumbs,
+    isLoading,
+    error,
     navigateToRef,
     navigateToBreadcrumb,
-    setCanvas,
   }
 }

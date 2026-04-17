@@ -11,6 +11,10 @@ interface NodeRendererProps {
   onClick: (node: ResolvedNode, event: React.MouseEvent) => void
   onDoubleClick: (node: ResolvedNode, event: React.MouseEvent) => void
   onContextMenu: (node: ResolvedNode, event: React.MouseEvent) => void
+  onNavigate: (node: ResolvedNode, event: React.MouseEvent) => void
+  onPointerDown?: (node: ResolvedNode, event: React.PointerEvent) => void
+  selectedId?: string | null
+  editingId?: string | null
 }
 
 /**
@@ -23,39 +27,39 @@ export function NodeRenderer({
   onClick,
   onDoubleClick,
   onContextMenu,
+  onNavigate,
+  onPointerDown,
+  selectedId,
+  editingId,
 }: NodeRendererProps) {
   // Separate groups from other nodes to ensure proper z-ordering.
   // Groups render first (behind), other nodes render on top.
   const groups = nodes.filter((n) => n.type === 'group')
   const others = nodes.filter((n) => n.type !== 'group')
 
+  const common = (node: ResolvedNode) => ({
+    node,
+    theme,
+    onClick,
+    onDoubleClick,
+    onContextMenu,
+    onNavigate,
+    onPointerDown,
+    isSelected: selectedId === node.id,
+    isEditing: editingId === node.id,
+  })
+
   return (
     <>
       {/* Groups first (behind) */}
       {groups.map((node) => (
-        <GroupNode
-          key={node.id}
-          node={node}
-          theme={theme}
-          onClick={onClick}
-          onDoubleClick={onDoubleClick}
-          onContextMenu={onContextMenu}
-        />
+        <GroupNode key={node.id} {...common(node)} />
       ))}
 
       {/* Other nodes on top, in array order */}
       {others.map((node) => {
         const Component = getNodeComponent(node.type)
-        return (
-          <Component
-            key={node.id}
-            node={node}
-            theme={theme}
-            onClick={onClick}
-            onDoubleClick={onDoubleClick}
-            onContextMenu={onContextMenu}
-          />
-        )
+        return <Component key={node.id} {...common(node)} />
       })}
     </>
   )

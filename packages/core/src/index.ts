@@ -25,6 +25,8 @@ export type {
   BreadcrumbEntry,
   BoundingBox,
   ContextMenuEvent,
+  NodeUpdate,
+  NodeMenuOption,
 } from './types.js'
 
 // Themes
@@ -58,6 +60,12 @@ export {
   getNodeLabel,
   getGroupChildren,
   validateCanvas,
+  generateNodeId,
+  getNodeMenuOptions,
+  createNodeFromOption,
+  addNode,
+  updateNode,
+  removeNode,
 } from './canvas.js'
 
 // Convenience theme collection

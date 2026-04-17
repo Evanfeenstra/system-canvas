@@ -1,5 +1,6 @@
 import React from 'react'
 import type { ResolvedNode, CanvasTheme } from 'system-canvas'
+import { RefIndicator } from './RefIndicator.js'
 
 interface GroupNodeProps {
   node: ResolvedNode
@@ -7,6 +8,10 @@ interface GroupNodeProps {
   onClick: (node: ResolvedNode, event: React.MouseEvent) => void
   onDoubleClick: (node: ResolvedNode, event: React.MouseEvent) => void
   onContextMenu: (node: ResolvedNode, event: React.MouseEvent) => void
+  onNavigate: (node: ResolvedNode, event: React.MouseEvent) => void
+  onPointerDown?: (node: ResolvedNode, event: React.PointerEvent) => void
+  isSelected?: boolean
+  isEditing?: boolean
 }
 
 export function GroupNode({
@@ -15,6 +20,10 @@ export function GroupNode({
   onClick,
   onDoubleClick,
   onContextMenu,
+  onNavigate,
+  onPointerDown,
+  isSelected,
+  isEditing,
 }: GroupNodeProps) {
   const { x, y, width, height } = node
 
@@ -25,10 +34,11 @@ export function GroupNode({
   return (
     <g
       className="system-canvas-node system-canvas-node--group"
-      style={{ cursor: node.isNavigable ? 'pointer' : 'default' }}
+      style={{ cursor: onPointerDown ? 'move' : node.isNavigable ? 'pointer' : 'default' }}
       onClick={(e) => onClick(node, e)}
       onDoubleClick={(e) => onDoubleClick(node, e)}
       onContextMenu={(e) => onContextMenu(node, e)}
+      onPointerDown={onPointerDown ? (e) => onPointerDown(node, e) : undefined}
     >
       {/* Dashed boundary */}
       <rect
@@ -43,8 +53,25 @@ export function GroupNode({
         strokeDasharray={theme.group.strokeDasharray}
       />
 
+      {/* Selection outline */}
+      {isSelected && (
+        <rect
+          x={x - 3}
+          y={y - 3}
+          width={width + 6}
+          height={height + 6}
+          rx={theme.group.cornerRadius + 3}
+          fill="none"
+          stroke={theme.node.labelColor}
+          strokeWidth={1.5}
+          strokeDasharray="4,3"
+          opacity={0.6}
+          pointerEvents="none"
+        />
+      )}
+
       {/* Label in top-left */}
-      {node.label && (
+      {!isEditing && node.label && (
         <text
           x={x + 12}
           y={y + theme.group.labelFontSize + 8}
@@ -58,16 +85,19 @@ export function GroupNode({
         </text>
       )}
 
-      {/* Ref indicator */}
-      {node.isNavigable && theme.node.refIndicator.icon !== 'none' && (
-        <path
-          d={`M ${x + width - 20} ${y + 10} l 5 5 l -5 5`}
-          fill="none"
-          stroke={theme.node.refIndicator.color}
-          strokeWidth={1.5}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          pointerEvents="none"
+      {/* Ref indicator — carved top-right corner (label is top-left) */}
+      {node.isNavigable && (
+        <RefIndicator
+          node={node}
+          theme={theme}
+          nodeX={x}
+          nodeY={y}
+          nodeWidth={width}
+          nodeHeight={height}
+          strokeColor={stroke}
+          strokeWidth={theme.group.strokeWidth}
+          corner="top-right"
+          onNavigate={onNavigate}
         />
       )}
     </g>

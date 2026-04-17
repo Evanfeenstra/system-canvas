@@ -1,5 +1,6 @@
 import React from 'react'
 import type { ResolvedNode, CanvasTheme } from 'system-canvas'
+import { RefIndicator } from './RefIndicator.js'
 
 interface FileNodeProps {
   node: ResolvedNode
@@ -7,6 +8,10 @@ interface FileNodeProps {
   onClick: (node: ResolvedNode, event: React.MouseEvent) => void
   onDoubleClick: (node: ResolvedNode, event: React.MouseEvent) => void
   onContextMenu: (node: ResolvedNode, event: React.MouseEvent) => void
+  onNavigate: (node: ResolvedNode, event: React.MouseEvent) => void
+  onPointerDown?: (node: ResolvedNode, event: React.PointerEvent) => void
+  isSelected?: boolean
+  isEditing?: boolean
 }
 
 /**
@@ -23,6 +28,10 @@ export function FileNode({
   onClick,
   onDoubleClick,
   onContextMenu,
+  onNavigate,
+  onPointerDown,
+  isSelected,
+  isEditing,
 }: FileNodeProps) {
   const { x, y, width, height } = node
 
@@ -63,10 +72,11 @@ export function FileNode({
   return (
     <g
       className="system-canvas-node system-canvas-node--file"
-      style={{ cursor: node.isNavigable ? 'pointer' : 'default' }}
+      style={{ cursor: onPointerDown ? 'move' : node.isNavigable ? 'pointer' : 'default' }}
       onClick={(e) => onClick(node, e)}
       onDoubleClick={(e) => onDoubleClick(node, e)}
       onContextMenu={(e) => onContextMenu(node, e)}
+      onPointerDown={onPointerDown ? (e) => onPointerDown(node, e) : undefined}
     >
       {/* Clip path to contain text within the node */}
       <defs>
@@ -98,7 +108,25 @@ export function FileNode({
         opacity={0.5}
       />
 
+      {/* Selection outline */}
+      {isSelected && (
+        <rect
+          x={x - 3}
+          y={y - 3}
+          width={width + 6}
+          height={height + 6}
+          rx={4}
+          fill="none"
+          stroke={theme.node.labelColor}
+          strokeWidth={1.5}
+          strokeDasharray="4,3"
+          opacity={0.6}
+          pointerEvents="none"
+        />
+      )}
+
       {/* Clipped text group */}
+      {!isEditing && (
       <g clipPath={`url(#${clipId})`}>
         {/* Directory path (small, above filename) */}
         {dirPath && (
@@ -142,17 +170,20 @@ export function FileNode({
           </text>
         )}
       </g>
+      )}
 
-      {/* Ref indicator */}
-      {node.isNavigable && theme.node.refIndicator.icon !== 'none' && (
-        <path
-          d={`M ${x + width - 16} ${y + height - 16} l 5 5 l -5 5`}
-          fill="none"
-          stroke={theme.node.refIndicator.color}
-          strokeWidth={1.5}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          pointerEvents="none"
+      {/* Ref indicator — carved bottom-right corner */}
+      {node.isNavigable && (
+        <RefIndicator
+          node={node}
+          theme={theme}
+          nodeX={x}
+          nodeY={y}
+          nodeWidth={width}
+          nodeHeight={height}
+          strokeColor={strokeColor}
+          strokeWidth={thinStroke}
+          onNavigate={onNavigate}
         />
       )}
     </g>

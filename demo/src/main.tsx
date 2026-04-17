@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useCallback, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { SystemCanvas } from 'system-canvas-react'
 import {
@@ -7,9 +7,17 @@ import {
   lightTheme,
   blueprintTheme,
   warmTheme,
+  addNode as addNodeHelper,
+  updateNode as updateNodeHelper,
+  removeNode as removeNodeHelper,
 } from 'system-canvas'
-import type { CanvasData, CanvasTheme, CanvasNode } from 'system-canvas'
-import { rootCanvas, canvasMap } from './data.js'
+import type {
+  CanvasData,
+  CanvasTheme,
+  CanvasNode,
+  NodeUpdate,
+} from 'system-canvas'
+import { rootCanvas as initialRoot, canvasMap as initialCanvasMap } from './data.js'
 
 const allThemes: Record<string, CanvasTheme> = {
   dark: darkTheme,
@@ -19,19 +27,54 @@ const allThemes: Record<string, CanvasTheme> = {
   warm: warmTheme,
 }
 
+const ROOT_KEY = '__root__'
+
 function App() {
   const [themeName, setThemeName] = useState<string>('dark')
   const [edgeStyle, setEdgeStyle] = useState<'bezier' | 'straight' | 'orthogonal'>('bezier')
+  const [editable, setEditable] = useState<boolean>(true)
+
+  // Hold all canvases in state. Root is stored under ROOT_KEY; sub-canvases
+  // are stored under their ref strings.
+  const [allCanvases, setAllCanvases] = useState<Record<string, CanvasData>>(() => ({
+    [ROOT_KEY]: initialRoot,
+    ...initialCanvasMap,
+  }))
 
   const theme = allThemes[themeName]
+  const rootCanvas = allCanvases[ROOT_KEY]
 
-  async function resolveCanvas(ref: string): Promise<CanvasData> {
-    // Simulate async load
-    await new Promise((r) => setTimeout(r, 200))
-    const canvas = canvasMap[ref]
-    if (!canvas) throw new Error(`Unknown canvas ref: ${ref}`)
-    return canvas
-  }
+  // Pass the sub-canvas map (without ROOT_KEY) to SystemCanvas
+  const canvases = allCanvases
+
+  const keyFor = (canvasRef: string | undefined) => canvasRef ?? ROOT_KEY
+
+  const handleNodeAdd = useCallback((node: CanvasNode, canvasRef: string | undefined) => {
+    const key = keyFor(canvasRef)
+    setAllCanvases((prev) => ({
+      ...prev,
+      [key]: addNodeHelper(prev[key] ?? { nodes: [], edges: [] }, node),
+    }))
+  }, [])
+
+  const handleNodeUpdate = useCallback(
+    (nodeId: string, patch: NodeUpdate, canvasRef: string | undefined) => {
+      const key = keyFor(canvasRef)
+      setAllCanvases((prev) => ({
+        ...prev,
+        [key]: updateNodeHelper(prev[key] ?? { nodes: [], edges: [] }, nodeId, patch),
+      }))
+    },
+    []
+  )
+
+  const handleNodeDelete = useCallback((nodeId: string, canvasRef: string | undefined) => {
+    const key = keyFor(canvasRef)
+    setAllCanvases((prev) => ({
+      ...prev,
+      [key]: removeNodeHelper(prev[key] ?? { nodes: [], edges: [] }, nodeId),
+    }))
+  }, [])
 
   return (
     <div style={{ width: '100vw', height: '100vh', position: 'relative' }}>
@@ -97,14 +140,26 @@ function App() {
             <option value="orthogonal">orthogonal</option>
           </select>
         </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <input
+            type="checkbox"
+            checked={editable}
+            onChange={(e) => setEditable(e.target.checked)}
+          />
+          Editable
+        </label>
       </div>
 
       <SystemCanvas
         canvas={rootCanvas}
+        canvases={canvases}
         theme={theme}
         edgeStyle={edgeStyle}
-        onResolveCanvas={resolveCanvas}
+        editable={editable}
         rootLabel="Organization"
+        onNodeAdd={handleNodeAdd}
+        onNodeUpdate={handleNodeUpdate}
+        onNodeDelete={handleNodeDelete}
         onNodeClick={(node: CanvasNode) => {
           console.log('Node clicked:', node.id)
         }}

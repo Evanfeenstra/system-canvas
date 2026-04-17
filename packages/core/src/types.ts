@@ -97,6 +97,11 @@ export interface CategoryDefinition {
   cornerRadius?: number
   /** Icon identifier — rendered inside the node */
   icon?: string | null
+  /**
+   * The JSON Canvas node type to create when this category is chosen from
+   * the add-node menu. Defaults to 'text'.
+   */
+  type?: NodeType
 }
 
 export interface PresetColor {
@@ -226,4 +231,28 @@ export interface ContextMenuEvent {
   type: 'node' | 'edge' | 'canvas'
   target?: CanvasNode | CanvasEdge
   position: { x: number; y: number }
+}
+
+// ---------------------------------------------------------------------------
+// Editing types
+// ---------------------------------------------------------------------------
+
+/** A partial update to an existing node (x/y/text/label/url/file/etc.). */
+export type NodeUpdate = Partial<Omit<CanvasNode, 'id' | 'type'>>
+
+/** An entry in the add-node menu. */
+export interface NodeMenuOption {
+  kind: 'category' | 'type'
+  /** For kind='category': the category key. For kind='type': the NodeType. */
+  value: string
+  label: string
+  icon?: string | null
+  fill?: string
+  stroke?: string
+  /**
+   * The resolved JSON Canvas node type for this option.
+   * Matches category.type (or 'text' if unset) for categories,
+   * or the NodeType itself for base types.
+   */
+  nodeType: NodeType
 }

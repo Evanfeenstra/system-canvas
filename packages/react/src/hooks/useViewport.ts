@@ -41,6 +41,20 @@ export function useViewport(options: UseViewportOptions): UseViewportResult {
 
     const zoomBehavior = zoom<SVGSVGElement, unknown>()
       .scaleExtent([minZoom, maxZoom])
+      // Don't start pan/zoom when the gesture begins on a node — that's a
+      // node drag. d3-zoom's default filter lets through most events; we
+      // extend it to also reject events originating inside a node.
+      .filter((event) => {
+        // Mirror d3-zoom's default rules for the things we still want to
+        // honor (ignore ctrl+wheel/secondary buttons etc.).
+        if (event.ctrlKey && event.type === 'wheel') return false
+        if (event.button) return false
+        const target = event.target as Element | null
+        if (target && typeof target.closest === 'function') {
+          if (target.closest('.system-canvas-node')) return false
+        }
+        return true
+      })
       .on('zoom', (event) => {
         const { x, y, k } = event.transform
         group.setAttribute('transform', `translate(${x},${y}) scale(${k})`)
