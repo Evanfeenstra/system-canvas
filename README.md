@@ -106,6 +106,7 @@ Nodes with a `ref` property become navigable. Provide an `onResolveCanvas` callb
 | `onNodeAdd` | `(node, canvasRef) => void` | Fired after user picks an option from the add-node menu |
 | `onNodeUpdate` | `(nodeId, patch, canvasRef) => void` | Fired after drags and node editor commits |
 | `onNodeDelete` | `(nodeId, canvasRef) => void` | Fired on Delete/Backspace with a selected node |
+| `onEdgeAdd` | `(edge, canvasRef) => void` | Fired when the user drags from a connection handle to another node |
 | `onEdgeUpdate` | `(edgeId, patch, canvasRef) => void` | Fired after edge label editor commits |
 | `onEdgeDelete` | `(edgeId, canvasRef) => void` | Fired on Delete/Backspace with a selected edge |
 | `onNavigate` | `(ref: string) => void` | Called when navigating to a sub-canvas |

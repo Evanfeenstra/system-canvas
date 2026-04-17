@@ -9,7 +9,7 @@ interface EdgeLabelEditorProps {
   onCancel: () => void
 }
 
-const EDITOR_WIDTH = 160
+const EDITOR_WIDTH = 110
 
 /**
  * Inline edge label editor rendered inside a <foreignObject> centered

@@ -34,6 +34,8 @@ React bindings. Depends on `system-canvas` for all types and math.
 - `src/components/NodeRenderer.tsx` — Dispatches to type-specific node components. Accepts `only?: 'groups' | 'non-groups'` so the caller can interleave edges between group and non-group layers.
 - `src/components/TextNode.tsx`, `FileNode.tsx`, `LinkNode.tsx`, `GroupNode.tsx` — One component per JSON Canvas node type.
 - `src/components/EdgeRenderer.tsx` — Renders all edges with arrowhead markers, labels, and click targets.
+- `src/components/ConnectionHandles.tsx` — Four small circular handles (one per side) shown on the hovered node in editable mode; pressing one begins an edge-creation drag.
+- `src/components/PendingEdgeRenderer.tsx` — Ghost edge drawn during an edge-creation drag. Uses `computeEdgePath` with a synthetic zero-sized target at the cursor when no drop target is hovered.
 - `src/components/RefIndicator.tsx` — Clickable "enter sub-canvas" corner drawn on navigable nodes.
 - `src/components/NodeEditor.tsx` — Inline editor rendered via `<foreignObject>` for text/file/link/group fields.
 - `src/components/EdgeLabelEditor.tsx` — Inline edge label editor rendered via `<foreignObject>` centered on the edge midpoint.
@@ -73,16 +75,18 @@ Callbacks (all receive `canvasRef: string | undefined` — the ref of the canvas
 - `onNodeAdd(node, canvasRef)` — fired when the user picks an option from the add-node menu.
 - `onNodeUpdate(nodeId, patch, canvasRef)` — fired after drags and editor commits. `patch: NodeUpdate` is `Partial<Omit<CanvasNode, 'id' | 'type'>>`.
 - `onNodeDelete(nodeId, canvasRef)` — fired when the user presses Delete/Backspace with a selected node.
+- `onEdgeAdd(edge, canvasRef)` — fired when the user completes an edge-creation drag (connection handle → another node).
 - `onEdgeUpdate(edgeId, patch, canvasRef)` — fired after edge label editor commits. `patch: EdgeUpdate` is `Partial<Omit<CanvasEdge, 'id'>>`.
 - `onEdgeDelete(edgeId, canvasRef)` — fired when the user presses Delete/Backspace with a selected edge.
 
-Consumers typically implement these by calling the core helpers `addNode / updateNode / removeNode / updateEdge / removeEdge` on their own `Record<string, CanvasData>` map.
+Consumers typically implement these by calling the core helpers `addNode / updateNode / removeNode / addEdge / updateEdge / removeEdge` on their own `Record<string, CanvasData>` map.
 
 Editing UI:
 - **Add**: a floating "+" button opens a popover listing categories (with color swatch + icon) above base JSON Canvas types. Fully replaceable via the `renderAddNodeButton` render prop.
 - **Drag**: pointer-event drag on any node. Dragging a group moves its spatially-contained children (computed once at drag-start via `getGroupChildren`). Drag overrides are local to the library and cleared on pointerup; the committed position flows through `onNodeUpdate`.
 - **Edit**: double-click any node opens an inline editor in a `<foreignObject>` — `<textarea>` for `text`, `<input>` for `file` / `link` / `group`. Enter commits, Escape cancels.
 - **Edges**: single-click selects an edge (thicker, high-contrast stroke). Double-click opens an inline label editor (`<foreignObject>` centered on the edge midpoint). Selecting an edge clears any node selection and vice versa. `onEdgeClick` always fires — in editable mode, selection happens alongside.
+- **Connect**: hovering a node in editable mode reveals four connection handles (one per side). Dragging from a handle to another node creates a new edge, firing `onEdgeAdd(edge, canvasRef)`. The new edge's `fromSide` is set to the handle that was grabbed; `toSide` is left undefined so the renderer auto-routes. Releasing over empty space cancels silently. A ghost edge (`PendingEdgeRenderer`) tracks the cursor during the drag; the hovered drop target gets a highlight halo.
 - **Delete**: single-click selects (dashed outline for nodes, highlighted stroke for edges). The outer `<div>` has `tabIndex={0}` so Delete/Backspace fires `onNodeDelete` or `onEdgeDelete` depending on what's selected. Keys are scoped to the canvas — no window listener.
 - **Pan vs. drag**: d3-zoom's `.filter()` rejects any gesture whose target is inside `.system-canvas-node`, so node drags never double as canvas pans. Background drags still pan normally.
 

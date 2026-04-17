@@ -10,6 +10,7 @@ import {
   addNode as addNodeHelper,
   updateNode as updateNodeHelper,
   removeNode as removeNodeHelper,
+  addEdge as addEdgeHelper,
   updateEdge as updateEdgeHelper,
   removeEdge as removeEdgeHelper,
 } from 'system-canvas'
@@ -102,6 +103,17 @@ function App() {
     []
   )
 
+  const handleEdgeAdd = useCallback(
+    (edge: CanvasEdge, canvasRef: string | undefined) => {
+      const key = keyFor(canvasRef)
+      setAllCanvases((prev) => ({
+        ...prev,
+        [key]: addEdgeHelper(prev[key] ?? { nodes: [], edges: [] }, edge),
+      }))
+    },
+    []
+  )
+
   return (
     <div style={{ width: '100vw', height: '100vh', position: 'relative' }}>
       {/* Theme / controls bar */}
@@ -186,6 +198,7 @@ function App() {
         onNodeAdd={handleNodeAdd}
         onNodeUpdate={handleNodeUpdate}
         onNodeDelete={handleNodeDelete}
+        onEdgeAdd={handleEdgeAdd}
         onEdgeUpdate={handleEdgeUpdate}
         onEdgeDelete={handleEdgeDelete}
         onNodeClick={(node: CanvasNode) => {

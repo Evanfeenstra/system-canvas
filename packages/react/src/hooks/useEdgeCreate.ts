@@ -1,0 +1,167 @@
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type {
+  CanvasEdge,
+  ResolvedNode,
+  Side,
+  ViewportState,
+} from 'system-canvas'
+import { screenToCanvas, generateEdgeId } from 'system-canvas'
+
+interface UseEdgeCreateOptions {
+  /** Ref to the SVG element (for client-rect offset + canvas-space conversion) */
+  svgRef: React.RefObject<SVGSVGElement | null>
+  /** Current viewport state ref */
+  viewport: React.RefObject<ViewportState>
+  /** All currently-resolved nodes (used to hit-test the release target) */
+  nodesRef: React.RefObject<ResolvedNode[]>
+  /** Called once a valid drop target is chosen */
+  onCreate: (edge: CanvasEdge) => void
+}
+
+export interface PendingEdgeState {
+  sourceId: string
+  sourceSide: Side
+  /** Current cursor position in canvas-space */
+  cursor: { x: number; y: number }
+  /** The node id the cursor is currently over (may equal sourceId) */
+  hoveredTargetId: string | null
+}
+
+interface UseEdgeCreateResult {
+  pending: PendingEdgeState | null
+  /** Attach to each connection handle's onPointerDown */
+  onHandlePointerDown: (
+    node: ResolvedNode,
+    side: Side,
+    event: React.PointerEvent
+  ) => void
+}
+
+/**
+ * Return the topmost non-group node whose bounds contain (x, y).
+ * Groups are never valid drop targets for edge creation.
+ */
+function hitTestNodes(
+  nodes: ResolvedNode[],
+  x: number,
+  y: number
+): ResolvedNode | null {
+  // Iterate in reverse so later (visually on top) nodes win ties.
+  for (let i = nodes.length - 1; i >= 0; i--) {
+    const n = nodes[i]
+    if (n.type === 'group') continue
+    if (x < n.x || x > n.x + n.width) continue
+    if (y < n.y || y > n.y + n.height) continue
+    return n
+  }
+  return null
+}
+
+export function useEdgeCreate(options: UseEdgeCreateOptions): UseEdgeCreateResult {
+  const { svgRef, viewport, nodesRef, onCreate } = options
+
+  const [pending, setPending] = useState<PendingEdgeState | null>(null)
+  const pendingRef = useRef<PendingEdgeState | null>(null)
+  pendingRef.current = pending
+
+  // Track the pointerId to ignore stray events.
+  const pointerIdRef = useRef<number | null>(null)
+
+  const toCanvasPoint = useCallback(
+    (clientX: number, clientY: number) => {
+      const rect = svgRef.current?.getBoundingClientRect()
+      const sx = clientX - (rect?.left ?? 0)
+      const sy = clientY - (rect?.top ?? 0)
+      const vp = viewport.current ?? { x: 0, y: 0, zoom: 1 }
+      return screenToCanvas(sx, sy, vp)
+    },
+    [svgRef, viewport]
+  )
+
+  const handleMove = useCallback(
+    (event: PointerEvent) => {
+      if (pointerIdRef.current !== event.pointerId) return
+      const curr = pendingRef.current
+      if (!curr) return
+      const cursor = toCanvasPoint(event.clientX, event.clientY)
+      const nodes = nodesRef.current ?? []
+      const hit = hitTestNodes(nodes, cursor.x, cursor.y)
+      const hoveredTargetId = hit ? hit.id : null
+      setPending({ ...curr, cursor, hoveredTargetId })
+    },
+    [nodesRef, toCanvasPoint]
+  )
+
+  const cleanup = useCallback(() => {
+    pointerIdRef.current = null
+    setPending(null)
+  }, [])
+
+  const handleUp = useCallback(
+    (event: PointerEvent) => {
+      if (pointerIdRef.current !== event.pointerId) return
+      const curr = pendingRef.current
+      if (!curr) {
+        cleanup()
+        return
+      }
+
+      const cursor = toCanvasPoint(event.clientX, event.clientY)
+      const nodes = nodesRef.current ?? []
+      const hit = hitTestNodes(nodes, cursor.x, cursor.y)
+
+      // Must release over a node that isn't the source.
+      if (hit && hit.id !== curr.sourceId) {
+        const edge: CanvasEdge = {
+          id: generateEdgeId(),
+          fromNode: curr.sourceId,
+          fromSide: curr.sourceSide,
+          toNode: hit.id,
+        }
+        onCreate(edge)
+      }
+
+      cleanup()
+    },
+    [cleanup, nodesRef, onCreate, toCanvasPoint]
+  )
+
+  const handleCancel = useCallback(
+    (event: PointerEvent) => {
+      if (pointerIdRef.current !== event.pointerId) return
+      cleanup()
+    },
+    [cleanup]
+  )
+
+  // Attach/detach window listeners only while a drag is active.
+  useEffect(() => {
+    if (!pending) return
+    window.addEventListener('pointermove', handleMove)
+    window.addEventListener('pointerup', handleUp)
+    window.addEventListener('pointercancel', handleCancel)
+    return () => {
+      window.removeEventListener('pointermove', handleMove)
+      window.removeEventListener('pointerup', handleUp)
+      window.removeEventListener('pointercancel', handleCancel)
+    }
+  }, [pending, handleMove, handleUp, handleCancel])
+
+  const onHandlePointerDown = useCallback(
+    (node: ResolvedNode, side: Side, event: React.PointerEvent) => {
+      if (event.button !== 0) return
+      if (pointerIdRef.current !== null) return
+      pointerIdRef.current = event.pointerId
+      const cursor = toCanvasPoint(event.clientX, event.clientY)
+      setPending({
+        sourceId: node.id,
+        sourceSide: side,
+        cursor,
+        hoveredTargetId: null,
+      })
+    },
+    [toCanvasPoint]
+  )
+
+  return { pending, onHandlePointerDown }
+}

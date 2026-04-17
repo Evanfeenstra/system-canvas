@@ -236,6 +236,27 @@ export function addNode(canvas: CanvasData, node: CanvasNode): CanvasData {
   }
 }
 
+/** Generate a unique edge id. */
+export function generateEdgeId(): string {
+  const g: any = globalThis as any
+  if (g.crypto?.randomUUID) {
+    return g.crypto.randomUUID()
+  }
+  return (
+    'e_' +
+    Math.random().toString(36).slice(2, 10) +
+    Math.random().toString(36).slice(2, 6)
+  )
+}
+
+/** Append an edge to a canvas, returning a new CanvasData. */
+export function addEdge(canvas: CanvasData, edge: CanvasEdge): CanvasData {
+  return {
+    ...canvas,
+    edges: [...(canvas.edges ?? []), edge],
+  }
+}
+
 /** Patch a node by id. Returns the same reference if the node is not found. */
 export function updateNode(
   canvas: CanvasData,

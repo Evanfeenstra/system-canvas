@@ -26,6 +26,7 @@ import { useNavigation } from '../hooks/useNavigation.js'
 import { useCanvasInteraction } from '../hooks/useCanvasInteraction.js'
 import { useNodeDrag } from '../hooks/useNodeDrag.js'
 import { useNodeResize } from '../hooks/useNodeResize.js'
+import { useEdgeCreate } from '../hooks/useEdgeCreate.js'
 import { Viewport, type ViewportHandle } from './Viewport.js'
 import { Breadcrumbs } from './Breadcrumbs.js'
 import { AddNodeButton, type AddNodeButtonRenderProps } from './AddNodeButton.js'
@@ -75,6 +76,7 @@ export interface SystemCanvasProps {
     canvasRef: string | undefined
   ) => void
   onEdgeDelete?: (edgeId: string, canvasRef: string | undefined) => void
+  onEdgeAdd?: (edge: CanvasEdge, canvasRef: string | undefined) => void
   /** Fully replace the default add-node FAB. */
   renderAddNodeButton?: (props: AddNodeButtonRenderProps) => React.ReactNode
 
@@ -116,6 +118,7 @@ export function SystemCanvas({
   onNodeDelete,
   onEdgeUpdate,
   onEdgeDelete,
+  onEdgeAdd,
   renderAddNodeButton,
   theme: themeProp,
   edgeStyle = 'bezier',
@@ -222,6 +225,26 @@ export function SystemCanvas({
     useNodeResize({
       viewport: viewportStateRef,
       onCommit: commitDrag,
+    })
+
+  // Proxy ref pointing at the SVG element exposed by the viewport handle.
+  // Updated on every render so useEdgeCreate can convert client coords.
+  const svgProxyRef = useRef<SVGSVGElement | null>(null)
+  svgProxyRef.current = viewportHandleRef.current?.getSvgElement() ?? null
+
+  const handleEdgeCreated = useCallback(
+    (edge: CanvasEdge) => {
+      onEdgeAdd?.(edge, currentCanvasRef)
+    },
+    [onEdgeAdd, currentCanvasRef]
+  )
+
+  const { pending: pendingEdge, onHandlePointerDown: onConnectionHandlePointerDown } =
+    useEdgeCreate({
+      svgRef: svgProxyRef,
+      viewport: viewportStateRef,
+      nodesRef,
+      onCreate: handleEdgeCreated,
     })
 
   // Zoom-then-navigate: animate toward the node, then swap canvas
@@ -470,6 +493,11 @@ export function SystemCanvas({
         onEditorCancel={handleEditorCancel}
         onEdgeEditorCommit={handleEdgeEditorCommit}
         onEdgeEditorCancel={handleEdgeEditorCancel}
+        pendingEdge={editable ? pendingEdge : null}
+        onConnectionHandlePointerDown={
+          editable ? onConnectionHandlePointerDown : undefined
+        }
+        edgeCreateEnabled={editable}
       />
 
       {/* Add-node FAB (editable only) */}

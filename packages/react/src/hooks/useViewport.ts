@@ -53,6 +53,7 @@ export function useViewport(options: UseViewportOptions): UseViewportResult {
         if (target && typeof target.closest === 'function') {
           if (target.closest('.system-canvas-node')) return false
           if (target.closest('.system-canvas-resize-handles')) return false
+          if (target.closest('.system-canvas-connection-handles')) return false
         }
         return true
       })

@@ -1,8 +1,10 @@
 import React, {
+  useCallback,
   useEffect,
   useImperativeHandle,
   useMemo,
   useRef,
+  useState,
   forwardRef,
 } from 'react'
 import type {
@@ -10,17 +12,29 @@ import type {
   ResolvedNode,
   CanvasTheme,
   EdgeStyle,
+  Side,
   ViewportState,
   NodeUpdate,
   EdgeUpdate,
 } from 'system-canvas'
-import { computeEdgeMidpoint } from 'system-canvas'
+import { computeEdgeMidpoint, screenToCanvas } from 'system-canvas'
 import { useViewport } from '../hooks/useViewport.js'
 import { NodeRenderer } from './NodeRenderer.js'
 import { EdgeRenderer } from './EdgeRenderer.js'
 import { NodeEditor } from './NodeEditor.js'
 import { EdgeLabelEditor } from './EdgeLabelEditor.js'
+import { ConnectionHandles } from './ConnectionHandles.js'
+import { PendingEdgeRenderer } from './PendingEdgeRenderer.js'
 import type { ResizeCorner, ResizeOverride } from '../hooks/useNodeResize.js'
+import type { PendingEdgeState } from '../hooks/useEdgeCreate.js'
+
+/**
+ * Extra padding around each node's bounding box when hit-testing for hover.
+ * This keeps the node "hovered" while the cursor is on a connection handle,
+ * which sits on the node border and extends slightly outside the rect.
+ * Matches (or slightly exceeds) the handle's hit radius.
+ */
+const HOVER_PADDING = 10
 
 interface ViewportProps {
   nodes: ResolvedNode[]
@@ -59,6 +73,16 @@ interface ViewportProps {
   onEditorCancel?: () => void
   onEdgeEditorCommit?: (patch: EdgeUpdate) => void
   onEdgeEditorCancel?: () => void
+
+  // Edge creation (editable mode)
+  pendingEdge?: PendingEdgeState | null
+  onConnectionHandlePointerDown?: (
+    node: ResolvedNode,
+    side: Side,
+    event: React.PointerEvent
+  ) => void
+  /** When true, enable handle-on-hover and pending-edge preview layer */
+  edgeCreateEnabled?: boolean
 }
 
 export interface ViewportHandle {
@@ -101,6 +125,9 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
       onEditorCancel,
       onEdgeEditorCommit,
       onEdgeEditorCancel,
+      pendingEdge,
+      onConnectionHandlePointerDown,
+      edgeCreateEnabled,
     },
     ref
   ) {
@@ -115,6 +142,9 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
     // Track whether a zoom-to-node navigation just happened.
     // When true, the next fitToContent should be instant (no animation).
     const navigatingRef = useRef(false)
+
+    // Hovered node id — used to render connection handles in editable mode.
+    const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null)
 
     useImperativeHandle(ref, () => ({
       zoomToNode: (node, onComplete) => {
@@ -165,6 +195,64 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
       ? renderNodes.find((n) => n.id === editingId) ?? null
       : null
 
+    // Hit-test pointer position against renderNodes to determine the hovered
+    // node. Groups are skipped entirely — they never expose connection
+    // handles and are never drop targets, so hovering inside a group "sees"
+    // the inner node (or nothing).
+    //
+    // The bounding box is padded by HOVER_PADDING so the cursor can move
+    // onto a connection handle (which sits on the node border, extending
+    // slightly outside the node rect) without losing hover.
+    const handleSvgPointerMove = useCallback(
+      (event: React.PointerEvent<SVGSVGElement>) => {
+        if (!edgeCreateEnabled) return
+        const svg = svgRef.current
+        if (!svg) return
+        const rect = svg.getBoundingClientRect()
+        const vp = viewport.current ?? { x: 0, y: 0, zoom: 1 }
+        const { x, y } = screenToCanvas(
+          event.clientX - rect.left,
+          event.clientY - rect.top,
+          vp
+        )
+        const pad = HOVER_PADDING
+        let hit: ResolvedNode | null = null
+        for (let i = renderNodes.length - 1; i >= 0; i--) {
+          const n = renderNodes[i]
+          if (n.type === 'group') continue
+          if (x < n.x - pad || x > n.x + n.width + pad) continue
+          if (y < n.y - pad || y > n.y + n.height + pad) continue
+          hit = n
+          break
+        }
+        const next = hit?.id ?? null
+        setHoveredNodeId((prev) => (prev === next ? prev : next))
+      },
+      [edgeCreateEnabled, renderNodes, svgRef, viewport]
+    )
+
+    const handleSvgPointerLeave = useCallback(() => {
+      setHoveredNodeId(null)
+    }, [])
+
+    // Node to show connection handles on: the hovered node, unless a drag
+    // is in progress (then show them on the source so the user always sees
+    // where the edge is coming from).
+    const handlesNodeId = pendingEdge?.sourceId ?? hoveredNodeId
+    const handlesNode =
+      edgeCreateEnabled && handlesNodeId
+        ? renderNodeMap.get(handlesNodeId) ?? null
+        : null
+
+    // Pending edge source/target lookup
+    const pendingSourceNode =
+      pendingEdge ? renderNodeMap.get(pendingEdge.sourceId) ?? null : null
+    const pendingTargetNode =
+      pendingEdge?.hoveredTargetId &&
+      pendingEdge.hoveredTargetId !== pendingEdge.sourceId
+        ? renderNodeMap.get(pendingEdge.hoveredTargetId) ?? null
+        : null
+
     // Compute edge editor anchor (midpoint of the edge being edited)
     const editingEdge = editingEdgeId
       ? edges.find((e) => e.id === editingEdgeId) ?? null
@@ -189,6 +277,8 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
         }}
         onClick={onCanvasClick}
         onContextMenu={onCanvasContextMenu}
+        onPointerMove={handleSvgPointerMove}
+        onPointerLeave={handleSvgPointerLeave}
       >
         {/* Grid pattern */}
         <defs>
@@ -261,6 +351,46 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
             onResizeHandlePointerDown={onResizeHandlePointerDown}
             only="non-groups"
           />
+
+          {/* Target highlight (halo) for the currently-hovered drop target
+              during an edge-creation drag. */}
+          {pendingTargetNode && (
+            <rect
+              className="system-canvas-drop-target"
+              x={pendingTargetNode.x - 4}
+              y={pendingTargetNode.y - 4}
+              width={pendingTargetNode.width + 8}
+              height={pendingTargetNode.height + 8}
+              rx={pendingTargetNode.resolvedCornerRadius + 4}
+              fill="none"
+              stroke={theme.node.labelColor}
+              strokeWidth={2}
+              opacity={0.85}
+              pointerEvents="none"
+            />
+          )}
+
+          {/* Ghost edge preview during edge-creation drag */}
+          {pendingEdge && pendingSourceNode && (
+            <PendingEdgeRenderer
+              sourceNode={pendingSourceNode}
+              sourceSide={pendingEdge.sourceSide}
+              cursor={pendingEdge.cursor}
+              targetNode={pendingTargetNode}
+              theme={theme}
+              defaultEdgeStyle={edgeStyle}
+            />
+          )}
+
+          {/* Connection handles on the hovered (or source-during-drag) node */}
+          {handlesNode && onConnectionHandlePointerDown && (
+            <ConnectionHandles
+              node={handlesNode}
+              theme={theme}
+              onHandlePointerDown={onConnectionHandlePointerDown}
+              immediate={!!pendingEdge}
+            />
+          )}
 
           {/* Inline editor on top of the edited node */}
           {editingNode && onEditorCommit && onEditorCancel && (

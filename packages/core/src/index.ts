@@ -67,6 +67,8 @@ export {
   addNode,
   updateNode,
   removeNode,
+  generateEdgeId,
+  addEdge,
   updateEdge,
   removeEdge,
 } from './canvas.js'
