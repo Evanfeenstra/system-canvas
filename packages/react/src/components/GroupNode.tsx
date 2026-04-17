@@ -31,18 +31,6 @@ export function GroupNode({
   const stroke = node.color ? node.resolvedStroke : theme.group.stroke
   const fill = node.color ? node.resolvedFill : theme.group.fill
 
-  // Label hit-target dimensions (top-left corner)
-  const labelFontSize = theme.group.labelFontSize
-  const labelPadX = 12
-  const labelPadY = 8
-  const labelText = node.label ?? ''
-  // Approximate text width — wide enough to click, not so wide it blocks the interior
-  const labelHitWidth = Math.min(
-    Math.max(labelText.length * (labelFontSize * 0.6) + labelPadX * 2, 60),
-    width
-  )
-  const labelHitHeight = labelFontSize + labelPadY * 2
-
   return (
     <g
       className="system-canvas-node system-canvas-node--group"
@@ -52,10 +40,7 @@ export function GroupNode({
       onContextMenu={(e) => onContextMenu(node, e)}
       onPointerDown={onPointerDown ? (e) => onPointerDown(node, e) : undefined}
     >
-      {/* Dashed boundary.
-          pointer-events='stroke' means only the drawn border responds to
-          clicks, so the translucent interior lets edges underneath be
-          selectable. The label + ref-indicator provide dedicated hit targets. */}
+      {/* Dashed boundary */}
       <rect
         x={x}
         y={y}
@@ -66,7 +51,6 @@ export function GroupNode({
         stroke={stroke}
         strokeWidth={theme.group.strokeWidth}
         strokeDasharray={theme.group.strokeDasharray}
-        pointerEvents="stroke"
       />
 
       {/* Selection outline */}
@@ -86,26 +70,13 @@ export function GroupNode({
         />
       )}
 
-      {/* Invisible hit target behind the label — gives the group a
-          click/drag handle in the top-left without blocking interior edges. */}
-      {!isEditing && (
-        <rect
-          x={x}
-          y={y}
-          width={labelHitWidth}
-          height={labelHitHeight}
-          rx={theme.group.cornerRadius}
-          fill="transparent"
-        />
-      )}
-
       {/* Label in top-left */}
       {!isEditing && node.label && (
         <text
-          x={x + labelPadX}
-          y={y + labelFontSize + labelPadY}
+          x={x + 12}
+          y={y + theme.group.labelFontSize + 8}
           fill={node.color ? stroke : theme.group.labelColor}
-          fontSize={labelFontSize}
+          fontSize={theme.group.labelFontSize}
           fontWeight={600}
           fontFamily={theme.node.fontFamily}
           pointerEvents="none"

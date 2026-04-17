@@ -218,7 +218,23 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
 
         {/* Transformable group -- d3-zoom applies transforms here */}
         <g ref={groupRef}>
-          {/* Edges first (behind nodes in painter's model) */}
+          {/* Groups first (behind everything) */}
+          <NodeRenderer
+            nodes={renderNodes}
+            theme={theme}
+            onClick={onNodeClick}
+            onDoubleClick={onNodeDoubleClick}
+            onContextMenu={onNodeContextMenu}
+            onNavigate={onNodeNavigate}
+            onPointerDown={onNodePointerDown}
+            selectedId={selectedId}
+            editingId={editingId}
+            only="groups"
+          />
+
+          {/* Edges above groups but below regular nodes — so edges appear
+              over translucent group fills (and are clickable there), while
+              still tucking under opaque nodes at their endpoints. */}
           <EdgeRenderer
             edges={edges}
             nodeMap={renderNodeMap}
@@ -231,7 +247,7 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
             editingId={editingEdgeId}
           />
 
-          {/* Nodes on top */}
+          {/* Non-group nodes on top (+ resize handles) */}
           <NodeRenderer
             nodes={renderNodes}
             theme={theme}
@@ -243,6 +259,7 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
             selectedId={selectedId}
             editingId={editingId}
             onResizeHandlePointerDown={onResizeHandlePointerDown}
+            only="non-groups"
           />
 
           {/* Inline editor on top of the edited node */}

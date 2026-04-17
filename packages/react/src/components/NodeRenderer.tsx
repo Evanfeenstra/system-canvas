@@ -22,6 +22,14 @@ interface NodeRendererProps {
     corner: ResizeCorner,
     event: React.PointerEvent
   ) => void
+  /**
+   * Render only a subset of nodes:
+   *   'groups'     → only group nodes
+   *   'non-groups' → everything except groups
+   *   undefined    → all nodes (groups first, then others)
+   * Callers can use this to interleave edges between groups and other nodes.
+   */
+  only?: 'groups' | 'non-groups'
 }
 
 /**
@@ -39,9 +47,8 @@ export function NodeRenderer({
   selectedId,
   editingId,
   onResizeHandlePointerDown,
+  only,
 }: NodeRendererProps) {
-  // Separate groups from other nodes to ensure proper z-ordering.
-  // Groups render first (behind), other nodes render on top.
   const groups = nodes.filter((n) => n.type === 'group')
   const others = nodes.filter((n) => n.type !== 'group')
 
@@ -62,25 +69,27 @@ export function NodeRenderer({
       ? nodes.find((n) => n.id === selectedId)
       : undefined
 
+  // Resize handles belong on the topmost layer: only render them when we're
+  // drawing non-groups (or everything), so they end up above edges and nodes.
+  const renderResizeHandles =
+    only !== 'groups' && selectedNode && onResizeHandlePointerDown
+
   return (
     <>
-      {/* Groups first (behind) */}
-      {groups.map((node) => (
-        <GroupNode key={node.id} {...common(node)} />
-      ))}
+      {only !== 'non-groups' &&
+        groups.map((node) => <GroupNode key={node.id} {...common(node)} />)}
 
-      {/* Other nodes on top, in array order */}
-      {others.map((node) => {
-        const Component = getNodeComponent(node.type)
-        return <Component key={node.id} {...common(node)} />
-      })}
+      {only !== 'groups' &&
+        others.map((node) => {
+          const Component = getNodeComponent(node.type)
+          return <Component key={node.id} {...common(node)} />
+        })}
 
-      {/* Resize handles for the selected node, drawn above everything */}
-      {selectedNode && onResizeHandlePointerDown && (
+      {renderResizeHandles && (
         <ResizeHandles
-          node={selectedNode}
+          node={selectedNode!}
           theme={theme}
-          onHandlePointerDown={onResizeHandlePointerDown}
+          onHandlePointerDown={onResizeHandlePointerDown!}
         />
       )}
     </>

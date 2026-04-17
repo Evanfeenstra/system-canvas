@@ -31,7 +31,7 @@ React bindings. Depends on `system-canvas` for all types and math.
 
 - `src/components/SystemCanvas.tsx` — Main orchestrator component. This is what consumers import.
 - `src/components/Viewport.tsx` — SVG container with d3-zoom pan/zoom and grid background.
-- `src/components/NodeRenderer.tsx` — Dispatches to type-specific node components. Groups render first (lower z-index).
+- `src/components/NodeRenderer.tsx` — Dispatches to type-specific node components. Accepts `only?: 'groups' | 'non-groups'` so the caller can interleave edges between group and non-group layers.
 - `src/components/TextNode.tsx`, `FileNode.tsx`, `LinkNode.tsx`, `GroupNode.tsx` — One component per JSON Canvas node type.
 - `src/components/EdgeRenderer.tsx` — Renders all edges with arrowhead markers, labels, and click targets.
 - `src/components/RefIndicator.tsx` — Clickable "enter sub-canvas" corner drawn on navigable nodes.
@@ -97,7 +97,9 @@ Resolution order for node visuals:
 
 ### Rendering technique
 
-Nodes use the **double-rect technique**: an opaque backer rectangle (matching the background color) is drawn first, then a semi-transparent styled rectangle on top. This prevents edges from bleeding through transparent node fills. Edges are rendered before nodes in SVG order (painter's model) so they appear behind.
+Nodes use the **double-rect technique**: an opaque backer rectangle (matching the background color) is drawn first, then a semi-transparent styled rectangle on top. This prevents edges from bleeding through transparent node fills.
+
+SVG paint order (painter's model, later = on top): **groups → edges → non-group nodes → resize handles**. Groups sit behind so edges can pass over their translucent fills and remain clickable; regular nodes sit above edges so arrow tips tuck cleanly under node borders at endpoints.
 
 ## Commands
 
