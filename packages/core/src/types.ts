@@ -77,12 +77,39 @@ export interface CanvasThemeHint {
   categories?: Record<string, CategoryDefinition>
 }
 
+/**
+ * A named band on the canvas. Columns are vertical bands (positioned along x);
+ * rows are horizontal bands (positioned along y).
+ *
+ * Lanes are a pure rendering/snapping primitive — the library has no opinion
+ * on what they represent. Consumers use them for roadmap columns
+ * (Now/Next/Later, Q1/Q2/Q3, phase names, date ranges), swim-lane teams,
+ * kanban groupings, or any other ordinal or positional labeling.
+ */
+export interface CanvasLane {
+  id: string
+  label: string
+  /**
+   * Position along the lane axis, in canvas-space. For a column this is its
+   * left edge (x); for a row it is its top edge (y).
+   */
+  start: number
+  /** Extent along the lane axis (width for columns, height for rows). */
+  size: number
+  /** Optional preset "1"-"6" or hex color override for the band fill. */
+  color?: CanvasColor
+}
+
 /** A JSON Canvas document (with system-canvas extensions). */
 export interface CanvasData {
   nodes?: CanvasNode[]
   edges?: CanvasEdge[]
   /** Optional theme hint — lets the document declare categories and a preferred base theme */
   theme?: CanvasThemeHint
+  /** Vertical bands rendered behind nodes. Consumer defines what they mean. */
+  columns?: CanvasLane[]
+  /** Horizontal bands rendered behind nodes. Consumer defines what they mean. */
+  rows?: CanvasLane[]
 }
 
 // ---------------------------------------------------------------------------
@@ -168,6 +195,25 @@ export interface BreadcrumbTheme {
   fontSize: number
 }
 
+export interface LanesTheme {
+  /** Fill color for odd-indexed bands (0, 2, 4, ...). */
+  bandFillEven: string
+  /** Fill color for even-indexed bands (1, 3, 5, ...). */
+  bandFillOdd: string
+  /** Color of the divider line drawn between bands. */
+  dividerColor: string
+  dividerWidth: number
+  /** Header (pinned label) styling */
+  headerBackground: string
+  headerTextColor: string
+  headerFontFamily: string
+  headerFontSize: number
+  /** Thickness of the sticky header strip, in screen pixels. */
+  headerSize: number
+  /** Padding between header text and the band edge, in screen pixels. */
+  headerPadding: number
+}
+
 export interface CanvasTheme {
   name: string
   background: string
@@ -176,6 +222,7 @@ export interface CanvasTheme {
   edge: EdgeTheme
   group: GroupTheme
   breadcrumbs: BreadcrumbTheme
+  lanes: LanesTheme
   /** Map preset colors "1"-"6" to fill/stroke */
   presetColors: Record<string, PresetColor>
   /** Map category strings to visual definitions */

@@ -7,6 +7,7 @@ import {
   lightTheme,
   blueprintTheme,
   warmTheme,
+  roadmapTheme,
   addNode as addNodeHelper,
   updateNode as updateNodeHelper,
   removeNode as removeNodeHelper,
@@ -23,6 +24,7 @@ import type {
   EdgeUpdate,
 } from 'system-canvas'
 import { rootCanvas as initialRoot, canvasMap as initialCanvasMap } from './data.js'
+import { roadmapRoot, roadmapCanvasMap } from './roadmap.js'
 
 const allThemes: Record<string, CanvasTheme> = {
   dark: darkTheme,
@@ -30,22 +32,39 @@ const allThemes: Record<string, CanvasTheme> = {
   light: lightTheme,
   blueprint: blueprintTheme,
   warm: warmTheme,
+  roadmap: roadmapTheme,
 }
 
 const ROOT_KEY = '__root__'
 
 function App() {
+  const [mode, setMode] = useState<'system' | 'roadmap'>('system')
   const [themeName, setThemeName] = useState<string>('dark')
   const [edgeStyle, setEdgeStyle] = useState<'bezier' | 'straight' | 'orthogonal'>('bezier')
   const [editable, setEditable] = useState<boolean>(true)
   const [zoomNavigation, setZoomNavigation] = useState<boolean>(true)
+  const [snapToLanes, setSnapToLanes] = useState<boolean>(true)
 
-  // Hold all canvases in state. Root is stored under ROOT_KEY; sub-canvases
-  // are stored under their ref strings.
-  const [allCanvases, setAllCanvases] = useState<Record<string, CanvasData>>(() => ({
+  // Two independent canvas stores — system diagram vs. roadmap.
+  const [systemCanvases, setSystemCanvases] = useState<Record<string, CanvasData>>(() => ({
     [ROOT_KEY]: initialRoot,
     ...initialCanvasMap,
   }))
+  const [roadmapCanvases, setRoadmapCanvases] = useState<Record<string, CanvasData>>(() => ({
+    [ROOT_KEY]: roadmapRoot,
+    ...roadmapCanvasMap,
+  }))
+
+  const allCanvases = mode === 'system' ? systemCanvases : roadmapCanvases
+  const setAllCanvases = mode === 'system' ? setSystemCanvases : setRoadmapCanvases
+
+  // When switching modes, flip to the most-appropriate theme automatically
+  // — but preserve the user's choice within each mode.
+  const handleModeChange = (next: 'system' | 'roadmap') => {
+    setMode(next)
+    if (next === 'roadmap' && themeName !== 'roadmap') setThemeName('roadmap')
+    if (next === 'system' && themeName === 'roadmap') setThemeName('dark')
+  }
 
   const theme = allThemes[themeName]
   const rootCanvas = allCanvases[ROOT_KEY]
@@ -136,6 +155,25 @@ function App() {
         }}
       >
         <label>
+          Mode:{' '}
+          <select
+            value={mode}
+            onChange={(e) => handleModeChange(e.target.value as 'system' | 'roadmap')}
+            style={{
+              background: 'transparent',
+              color: theme.breadcrumbs.activeColor,
+              border: `1px solid ${theme.breadcrumbs.separatorColor}`,
+              borderRadius: 4,
+              padding: '2px 6px',
+              fontFamily: 'inherit',
+              fontSize: 'inherit',
+            }}
+          >
+            <option value="system">system</option>
+            <option value="roadmap">roadmap</option>
+          </select>
+        </label>
+        <label>
           Theme:{' '}
           <select
             value={themeName}
@@ -195,16 +233,28 @@ function App() {
           />
           Zoom-nav
         </label>
+        {mode === 'roadmap' && (
+          <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <input
+              type="checkbox"
+              checked={snapToLanes}
+              onChange={(e) => setSnapToLanes(e.target.checked)}
+            />
+            Snap to lanes
+          </label>
+        )}
       </div>
 
       <SystemCanvas
+        key={mode}
         canvas={rootCanvas}
         canvases={canvases}
         theme={theme}
         edgeStyle={edgeStyle}
         editable={editable}
         zoomNavigation={zoomNavigation}
-        rootLabel="Organization"
+        snapToLanes={mode === 'roadmap' ? snapToLanes : false}
+        rootLabel={mode === 'roadmap' ? 'Roadmap' : 'Organization'}
         onNodeAdd={handleNodeAdd}
         onNodeUpdate={handleNodeUpdate}
         onNodeDelete={handleNodeDelete}

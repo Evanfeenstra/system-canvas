@@ -58,6 +58,19 @@ export const midnightTheme: CanvasTheme = {
     fontSize: 11,
   },
 
+  lanes: {
+    bandFillEven: 'rgba(17, 17, 17, 0.7)',
+    bandFillOdd: 'rgba(0, 0, 0, 0)',
+    dividerColor: 'rgba(55, 65, 81, 0.6)',   // gray-700
+    dividerWidth: 1,
+    headerBackground: 'rgba(0, 0, 0, 0.92)',
+    headerTextColor: '#00ff88',
+    headerFontFamily: "'JetBrains Mono', monospace",
+    headerFontSize: 10,
+    headerSize: 26,
+    headerPadding: 10,
+  },
+
   presetColors: {
     '1': { fill: 'rgba(255, 0, 60, 0.15)',   stroke: '#ff003c' },  // neon red
     '2': { fill: 'rgba(255, 140, 0, 0.15)',  stroke: '#ff8c00' },  // neon orange

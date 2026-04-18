@@ -58,6 +58,19 @@ export const darkTheme: CanvasTheme = {
     fontSize: 12,
   },
 
+  lanes: {
+    bandFillEven: 'rgba(30, 41, 59, 0.18)',  // slate-800 soft
+    bandFillOdd: 'rgba(30, 41, 59, 0.06)',
+    dividerColor: 'rgba(71, 85, 105, 0.35)', // slate-600 muted
+    dividerWidth: 1,
+    headerBackground: 'rgba(15, 23, 42, 0.88)',
+    headerTextColor: '#cbd5e1',              // slate-300
+    headerFontFamily: "'JetBrains Mono', 'Fira Code', 'SF Mono', monospace",
+    headerFontSize: 11,
+    headerSize: 28,
+    headerPadding: 10,
+  },
+
   presetColors: {
     '1': { fill: 'rgba(136, 19, 55, 0.4)',   stroke: '#fb7185' },  // rose — security/auth
     '2': { fill: 'rgba(120, 53, 15, 0.3)',   stroke: '#fb923c' },  // orange — events/messaging

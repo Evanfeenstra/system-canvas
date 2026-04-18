@@ -21,6 +21,7 @@ import {
   getNodeMenuOptions,
   createNodeFromOption,
   screenToCanvas,
+  snapToLane,
 } from 'system-canvas'
 import { useNavigation } from '../hooks/useNavigation.js'
 import { useCanvasInteraction } from '../hooks/useCanvasInteraction.js'
@@ -35,6 +36,7 @@ import {
 import { Viewport, type ViewportHandle } from './Viewport.js'
 import { Breadcrumbs } from './Breadcrumbs.js'
 import { AddNodeButton, type AddNodeButtonRenderProps } from './AddNodeButton.js'
+import { LaneHeaders } from './LaneHeaders.js'
 
 export interface SystemCanvasProps {
   /** Canvas data to render */
@@ -111,6 +113,25 @@ export interface SystemCanvasProps {
   autoFit?: 'canvas-change' | 'always' | 'initial' | 'never'
 
   /**
+   * Controls rendering of the lane header strips (column labels on top,
+   * row labels on the left) when the current canvas has `columns` or `rows`.
+   *
+   * - `'pinned'` (default): headers stay glued to the viewport edges,
+   *   so labels are always visible as the user pans/zooms.
+   * - `'scroll'`: headers live at the top/left of the lane grid and
+   *   move with the content.
+   * - `'none'`: no headers are drawn. The lane bands still render.
+   */
+  laneHeaders?: 'pinned' | 'scroll' | 'none'
+
+  /**
+   * When true and the current canvas has `columns` or `rows`, dragged nodes
+   * snap their x (for columns) and y (for rows) to the nearest lane start.
+   * Defaults to `false` so existing behavior is preserved.
+   */
+  snapToLanes?: boolean
+
+  /**
    * When enabled, zooming into a ref-bearing node past a threshold commits
    * the navigation and continues seamlessly inside the sub-canvas. Zooming
    * back out past a threshold pops to the parent. Accepts `true` for the
@@ -157,6 +178,8 @@ export function SystemCanvas({
   maxZoom,
   onViewportChange,
   autoFit = 'canvas-change',
+  laneHeaders = 'pinned',
+  snapToLanes = false,
   zoomNavigation = false,
   className,
   style,
@@ -305,12 +328,54 @@ export function SystemCanvas({
     setEditingEdgeId(null)
   }, [currentCanvasRef])
 
-  // Drag
+  // Container size — tracked so the lane-header overlay can size itself.
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const [containerSize, setContainerSize] = useState<{ width: number; height: number }>(
+    { width: 0, height: 0 }
+  )
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const update = () => {
+      const r = el.getBoundingClientRect()
+      setContainerSize({ width: r.width, height: r.height })
+    }
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  const hasLanes =
+    (currentCanvas.columns && currentCanvas.columns.length > 0) ||
+    (currentCanvas.rows && currentCanvas.rows.length > 0)
+  const showLaneHeaders = hasLanes && laneHeaders !== 'none'
+
+  const getViewportState = useCallback(
+    () => viewportStateRef.current ?? { x: 0, y: 0, zoom: 1 },
+    []
+  )
+
+  // Drag. If snapToLanes is on and the canvas has lanes, snap the committed
+  // x (to column start) and/or y (to row start) before forwarding the patch.
   const commitDrag = useCallback(
     (id: string, patch: NodeUpdate) => {
-      onNodeUpdate?.(id, patch, currentCanvasRef)
+      let final = patch
+      if (snapToLanes) {
+        const cols = currentCanvas.columns
+        const rows = currentCanvas.rows
+        const nx = patch.x
+        const ny = patch.y
+        if (cols && cols.length > 0 && nx != null) {
+          final = { ...final, x: Math.round(snapToLane(nx, cols)) }
+        }
+        if (rows && rows.length > 0 && ny != null) {
+          final = { ...final, y: Math.round(snapToLane(ny, rows)) }
+        }
+      }
+      onNodeUpdate?.(id, final, currentCanvasRef)
     },
-    [onNodeUpdate, currentCanvasRef]
+    [onNodeUpdate, currentCanvasRef, snapToLanes, currentCanvas.columns, currentCanvas.rows]
   )
 
   const { dragOverrides, onPointerDown: onNodePointerDown } = useNodeDrag({
@@ -602,6 +667,7 @@ export function SystemCanvas({
 
   return (
     <div
+      ref={containerRef}
       className={`system-canvas ${className ?? ''}`}
       tabIndex={editable ? 0 : -1}
       onKeyDown={handleKeyDown}
@@ -651,6 +717,8 @@ export function SystemCanvas({
         nodeMap={nodeMap}
         theme={theme}
         edgeStyle={edgeStyle}
+        columns={currentCanvas.columns}
+        rows={currentCanvas.rows}
         minZoom={effectiveMinZoom}
         maxZoom={effectiveMaxZoom}
         defaultViewport={defaultViewport}
@@ -687,6 +755,19 @@ export function SystemCanvas({
         }
         edgeCreateEnabled={editable}
       />
+
+      {/* Sticky lane headers overlay (above the viewport SVG) */}
+      {showLaneHeaders && (
+        <LaneHeaders
+          columns={currentCanvas.columns}
+          rows={currentCanvas.rows}
+          theme={theme}
+          getViewport={getViewportState}
+          width={containerSize.width}
+          height={containerSize.height}
+          pinned={laneHeaders === 'pinned'}
+        />
+      )}
 
       {/* Add-node FAB (editable only) */}
       {editable &&
