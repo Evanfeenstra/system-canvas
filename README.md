@@ -1,15 +1,15 @@
 # system-canvas
 
-Interactive, zoomable SVG diagrams from JSON Canvas documents.
+Interactive, infinitely zoomable, editable SVG diagrams from JSON Canvas documents.
 
-![system-canvas demo](demo/system-canvas.png)
+![system-canvas demo](demo/zoom.gif)
 
 ## Packages
 
-| Package | Description |
-|---------|-------------|
-| `system-canvas` | Pure TypeScript core. Types, themes, edge routing, viewport math. Zero dependencies. |
-| `system-canvas-react` | React components. Pan/zoom viewport, node renderers, breadcrumb navigation. |
+| Package               | Description                                                                          |
+| --------------------- | ------------------------------------------------------------------------------------ |
+| `system-canvas`       | Pure TypeScript core. Types, themes, edge routing, viewport math. Zero dependencies. |
+| `system-canvas-react` | React components. Pan/zoom viewport, node renderers, breadcrumb navigation.          |
 
 ## Install
 
@@ -20,33 +20,49 @@ npm install system-canvas system-canvas-react
 ## Quick start
 
 ```tsx
-import { SystemCanvas } from 'system-canvas-react'
+import { SystemCanvas } from "system-canvas-react";
 
 const canvas = {
   theme: {
-    base: 'dark',
+    base: "dark",
     categories: {
       service: {
-        defaultWidth: 140, defaultHeight: 60,
-        fill: 'rgba(6, 78, 59, 0.4)', stroke: '#34d399',
+        defaultWidth: 140,
+        defaultHeight: 60,
+        fill: "rgba(6, 78, 59, 0.4)",
+        stroke: "#34d399",
       },
     },
   },
   nodes: [
-    { id: 'api', type: 'text', text: 'API Server\nExpress', x: 0, y: 0, category: 'service' },
-    { id: 'db', type: 'text', text: 'PostgreSQL', x: 250, y: 0, width: 140, height: 60, color: '6' },
+    {
+      id: "api",
+      type: "text",
+      text: "API Server\nExpress",
+      x: 0,
+      y: 0,
+      category: "service",
+    },
+    {
+      id: "db",
+      type: "text",
+      text: "PostgreSQL",
+      x: 250,
+      y: 0,
+      width: 140,
+      height: 60,
+      color: "6",
+    },
   ],
-  edges: [
-    { id: 'e1', fromNode: 'api', toNode: 'db', label: 'queries' },
-  ],
-}
+  edges: [{ id: "e1", fromNode: "api", toNode: "db", label: "queries" }],
+};
 
 function App() {
   return (
-    <div style={{ width: '100vw', height: '100vh' }}>
+    <div style={{ width: "100vw", height: "100vh" }}>
       <SystemCanvas canvas={canvas} />
     </div>
-  )
+  );
 }
 ```
 
@@ -84,8 +100,8 @@ Nodes with a `ref` property become navigable. Provide an `onResolveCanvas` callb
 <SystemCanvas
   canvas={rootCanvas}
   onResolveCanvas={async (ref) => {
-    const response = await fetch(`/api/canvas/${ref}`)
-    return response.json()
+    const response = await fetch(`/api/canvas/${ref}`);
+    return response.json();
   }}
 />
 ```
@@ -95,16 +111,20 @@ Nodes with a `ref` property become navigable. Provide an `onResolveCanvas` callb
 Pass `editable` and wire the granular mutation callbacks. The library is stateless -- you own `CanvasData` and pass it back on every render. Core helpers do the immutable merge for you:
 
 ```tsx
-import { useState } from 'react'
-import { SystemCanvas } from 'system-canvas-react'
+import { useState } from "react";
+import { SystemCanvas } from "system-canvas-react";
 import {
-  addNode, updateNode, removeNode,
-  addEdge, updateEdge, removeEdge,
-} from 'system-canvas'
-import type { CanvasData } from 'system-canvas'
+  addNode,
+  updateNode,
+  removeNode,
+  addEdge,
+  updateEdge,
+  removeEdge,
+} from "system-canvas";
+import type { CanvasData } from "system-canvas";
 
 function App() {
-  const [canvas, setCanvas] = useState<CanvasData>(initial)
+  const [canvas, setCanvas] = useState<CanvasData>(initial);
 
   return (
     <SystemCanvas
@@ -117,7 +137,7 @@ function App() {
       onEdgeUpdate={(id, patch) => setCanvas((c) => updateEdge(c, id, patch))}
       onEdgeDelete={(id) => setCanvas((c) => removeEdge(c, id))}
     />
-  )
+  );
 }
 ```
 
@@ -133,41 +153,41 @@ Interactions in editable mode:
 
 ## Props
 
-| Prop | Type | Description |
-|------|------|-------------|
-| `canvas` | `CanvasData` | Canvas document to render |
-| `theme` | `CanvasTheme` | Theme override (optional, defaults to dark) |
-| `edgeStyle` | `'bezier' \| 'straight' \| 'orthogonal'` | Edge routing mode (default: bezier) |
-| `onResolveCanvas` | `(ref: string) => Promise<CanvasData>` | Resolve a ref to sub-canvas data |
-| `onNodeClick` | `(node: CanvasNode) => void` | Node click handler |
-| `onNodeDoubleClick` | `(node: CanvasNode) => void` | Node double-click handler |
-| `onEdgeClick` | `(edge: CanvasEdge) => void` | Edge click handler |
-| `onEdgeDoubleClick` | `(edge: CanvasEdge) => void` | Edge double-click handler |
-| `onContextMenu` | `(event: ContextMenuEvent) => void` | Right-click handler |
-| `editable` | `boolean` | Enable add / edit / move / delete for nodes and edges |
-| `onNodeAdd` | `(node, canvasRef) => void` | Fired after user picks an option from the add-node menu |
-| `onNodeUpdate` | `(nodeId, patch, canvasRef) => void` | Fired after drags and node editor commits |
-| `onNodeDelete` | `(nodeId, canvasRef) => void` | Fired on Delete/Backspace with a selected node |
-| `onEdgeAdd` | `(edge, canvasRef) => void` | Fired when the user drags from a connection handle to another node |
-| `onEdgeUpdate` | `(edgeId, patch, canvasRef) => void` | Fired after edge label editor commits |
-| `onEdgeDelete` | `(edgeId, canvasRef) => void` | Fired on Delete/Backspace with a selected edge |
-| `onNavigate` | `(ref: string) => void` | Called when navigating to a sub-canvas |
-| `onBreadcrumbClick` | `(index: number) => void` | Called when a breadcrumb is clicked |
-| `rootLabel` | `string` | Root breadcrumb label (default: "Home") |
-| `minZoom` | `number` | Minimum zoom level (default: 0.1) |
-| `maxZoom` | `number` | Maximum zoom level (default: 4) |
-| `defaultViewport` | `ViewportState` | Initial viewport position and zoom |
-| `onViewportChange` | `(viewport: ViewportState) => void` | Called on pan/zoom |
+| Prop                | Type                                     | Description                                                        |
+| ------------------- | ---------------------------------------- | ------------------------------------------------------------------ |
+| `canvas`            | `CanvasData`                             | Canvas document to render                                          |
+| `theme`             | `CanvasTheme`                            | Theme override (optional, defaults to dark)                        |
+| `edgeStyle`         | `'bezier' \| 'straight' \| 'orthogonal'` | Edge routing mode (default: bezier)                                |
+| `onResolveCanvas`   | `(ref: string) => Promise<CanvasData>`   | Resolve a ref to sub-canvas data                                   |
+| `onNodeClick`       | `(node: CanvasNode) => void`             | Node click handler                                                 |
+| `onNodeDoubleClick` | `(node: CanvasNode) => void`             | Node double-click handler                                          |
+| `onEdgeClick`       | `(edge: CanvasEdge) => void`             | Edge click handler                                                 |
+| `onEdgeDoubleClick` | `(edge: CanvasEdge) => void`             | Edge double-click handler                                          |
+| `onContextMenu`     | `(event: ContextMenuEvent) => void`      | Right-click handler                                                |
+| `editable`          | `boolean`                                | Enable add / edit / move / delete for nodes and edges              |
+| `onNodeAdd`         | `(node, canvasRef) => void`              | Fired after user picks an option from the add-node menu            |
+| `onNodeUpdate`      | `(nodeId, patch, canvasRef) => void`     | Fired after drags and node editor commits                          |
+| `onNodeDelete`      | `(nodeId, canvasRef) => void`            | Fired on Delete/Backspace with a selected node                     |
+| `onEdgeAdd`         | `(edge, canvasRef) => void`              | Fired when the user drags from a connection handle to another node |
+| `onEdgeUpdate`      | `(edgeId, patch, canvasRef) => void`     | Fired after edge label editor commits                              |
+| `onEdgeDelete`      | `(edgeId, canvasRef) => void`            | Fired on Delete/Backspace with a selected edge                     |
+| `onNavigate`        | `(ref: string) => void`                  | Called when navigating to a sub-canvas                             |
+| `onBreadcrumbClick` | `(index: number) => void`                | Called when a breadcrumb is clicked                                |
+| `rootLabel`         | `string`                                 | Root breadcrumb label (default: "Home")                            |
+| `minZoom`           | `number`                                 | Minimum zoom level (default: 0.1)                                  |
+| `maxZoom`           | `number`                                 | Maximum zoom level (default: 4)                                    |
+| `defaultViewport`   | `ViewportState`                          | Initial viewport position and zoom                                 |
+| `onViewportChange`  | `(viewport: ViewportState) => void`      | Called on pan/zoom                                                 |
 
 ## JSON Canvas extensions
 
 This library extends the [JSON Canvas 1.0 spec](https://jsoncanvas.org) with three additive fields:
 
-| Field | On | Purpose |
-|-------|-----|---------|
-| `ref` | any node | URI pointing to a sub-canvas for drill-down navigation |
-| `category` | any node | Maps to a category definition in the theme for reusable styling |
-| `theme` | top-level | Inline base theme name and category definitions |
+| Field      | On        | Purpose                                                         |
+| ---------- | --------- | --------------------------------------------------------------- |
+| `ref`      | any node  | URI pointing to a sub-canvas for drill-down navigation          |
+| `category` | any node  | Maps to a category definition in the theme for reusable styling |
+| `theme`    | top-level | Inline base theme name and category definitions                 |
 
 Standard JSON Canvas documents render correctly. The extensions are ignored by other viewers.
 

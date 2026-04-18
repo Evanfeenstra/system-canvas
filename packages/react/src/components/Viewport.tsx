@@ -64,6 +64,21 @@ interface ViewportProps {
    * trigger key for `autoFit === 'canvas-change'`.
    */
   canvasRef?: string
+  /**
+   * When provided, skip the next canvas-change auto-fit and apply this
+   * transform instantly instead. Used by the zoom-navigation feature for
+   * seamless enter/exit handoffs. Must be re-provided on every render
+   * where it should apply — consumers set this in the same render as the
+   * canvas change and clear it once consumed via `onHandoffApplied`.
+   */
+  handoffTransform?: ViewportState | null
+  /** Called after the handoffTransform has been applied. */
+  onHandoffApplied?: () => void
+  /**
+   * When a handoff transform is applied, fade the content group's
+   * opacity from 0 to 1 over this many milliseconds. 0 disables the fade.
+   */
+  handoffFadeMs?: number
   onNodeClick: (node: ResolvedNode, event: React.MouseEvent) => void
   onNodeDoubleClick: (node: ResolvedNode, event: React.MouseEvent) => void
   onNodeNavigate: (node: ResolvedNode, event: React.MouseEvent) => void
@@ -106,6 +121,10 @@ interface ViewportProps {
 export interface ViewportHandle {
   zoomToNode: (node: ResolvedNode, onComplete?: () => void) => void
   fitToContent: (nodes: ResolvedNode[], animate?: boolean) => void
+  setTransform: (
+    transform: ViewportState,
+    options?: { animate?: boolean; durationMs?: number }
+  ) => void
   getSvgElement: () => SVGSVGElement | null
   getViewport: () => ViewportState
 }
@@ -148,10 +167,13 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
       edgeCreateEnabled,
       autoFit = 'canvas-change',
       canvasRef,
+      handoffTransform,
+      onHandoffApplied,
+      handoffFadeMs = 0,
     },
     ref
   ) {
-    const { svgRef, groupRef, viewport, fitToContent, zoomToNode } =
+    const { svgRef, groupRef, viewport, fitToContent, zoomToNode, setTransform } =
       useViewport({
         minZoom,
         maxZoom,
@@ -162,6 +184,50 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
     // Track whether a zoom-to-node navigation just happened.
     // When true, the next fitToContent should be instant (no animation).
     const navigatingRef = useRef(false)
+
+    // Fade animation is driven directly on the DOM group to avoid
+    // React-render timing issues. We set opacity:0 + transition, then on
+    // the next animation frame flip to opacity:1 so the browser paints
+    // the transition.
+    const fadeRafRef = useRef<number | null>(null)
+    const fadeTimeoutRef = useRef<number | null>(null)
+
+    const triggerFade = useCallback((durationMs: number) => {
+      if (durationMs <= 0) return
+      const g = groupRef.current
+      if (!g) return
+      if (fadeRafRef.current !== null) cancelAnimationFrame(fadeRafRef.current)
+      if (fadeTimeoutRef.current !== null)
+        clearTimeout(fadeTimeoutRef.current)
+
+      // Instantly snap to opacity 0 with no transition.
+      g.style.transition = 'none'
+      g.style.opacity = '0'
+      // Force a layout/style flush so the 0 value is committed before we
+      // install the transition and flip to 1.
+      // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+      g.getBoundingClientRect()
+
+      fadeRafRef.current = requestAnimationFrame(() => {
+        g.style.transition = `opacity ${durationMs}ms ease-out`
+        g.style.opacity = '1'
+        fadeTimeoutRef.current = window.setTimeout(() => {
+          // Clean up inline styles so future renders aren't constrained.
+          g.style.transition = ''
+          g.style.opacity = ''
+          fadeTimeoutRef.current = null
+        }, durationMs + 16)
+      })
+    }, [])
+
+    useEffect(() => {
+      return () => {
+        if (fadeRafRef.current !== null)
+          cancelAnimationFrame(fadeRafRef.current)
+        if (fadeTimeoutRef.current !== null)
+          clearTimeout(fadeTimeoutRef.current)
+      }
+    }, [])
 
     // Hovered node id — used to render connection handles in editable mode.
     const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null)
@@ -175,6 +241,7 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
         zoomToNode(node, onComplete)
       },
       fitToContent,
+      setTransform,
       getSvgElement: () => svgRef.current,
       getViewport: () => viewport.current ?? { x: 0, y: 0, zoom: 1 },
     }))
@@ -248,8 +315,27 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
       const key = autoFit === 'canvas-change' ? canvasRef ?? '__root__' : 'mounted'
       if (fittedForRef.current === key) return
       fittedForRef.current = key
+      // If a zoom-navigation handoff transform was supplied for this canvas
+      // change, apply it instantly instead of fitting.
+      if (handoffTransform) {
+        setTransform(handoffTransform, { animate: false })
+        if (handoffFadeMs > 0) triggerFade(handoffFadeMs)
+        onHandoffApplied?.()
+        return
+      }
       fitNow()
-    }, [nodes, autoFit, canvasRef, defaultViewport, fitNow])
+    }, [
+      nodes,
+      autoFit,
+      canvasRef,
+      defaultViewport,
+      fitNow,
+      handoffTransform,
+      setTransform,
+      onHandoffApplied,
+      handoffFadeMs,
+      triggerFade,
+    ])
 
     const editingNode = editingId
       ? renderNodes.find((n) => n.id === editingId) ?? null
@@ -403,7 +489,8 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
           fill="url(#system-canvas-grid)"
         />
 
-        {/* Transformable group -- d3-zoom applies transforms here */}
+        {/* Transformable group -- d3-zoom applies transforms here.
+            Fade-in on handoff is applied directly via groupRef's style. */}
         <g ref={groupRef}>
           {/* Groups first (behind everything) */}
           <NodeRenderer
