@@ -36,6 +36,12 @@ interface UseNavigationResult {
   navigateToRef: (node: CanvasNode) => Promise<void>
   /** Navigate back to a breadcrumb */
   navigateToBreadcrumb: (index: number) => void
+  /**
+   * Seed canvas data for a ref into the async cache without navigating.
+   * Used by zoom-navigation pre-fetch so subsequent `navigateToRef` calls
+   * complete synchronously.
+   */
+  seedCanvas: (ref: string, data: CanvasData) => void
 }
 
 export function useNavigation(options: UseNavigationOptions): UseNavigationResult {
@@ -113,6 +119,10 @@ export function useNavigation(options: UseNavigationOptions): UseNavigationResul
     [canvases, onResolveCanvas, onNavigate]
   )
 
+  const seedCanvas = useCallback((ref: string, data: CanvasData) => {
+    asyncCacheRef.current.set(ref, data)
+  }, [])
+
   const navigateToBreadcrumb = useCallback(
     (index: number) => {
       onBreadcrumbClick?.(index)
@@ -130,5 +140,6 @@ export function useNavigation(options: UseNavigationOptions): UseNavigationResul
     error,
     navigateToRef,
     navigateToBreadcrumb,
+    seedCanvas,
   }
 }

@@ -64,6 +64,16 @@ interface ViewportProps {
    * trigger key for `autoFit === 'canvas-change'`.
    */
   canvasRef?: string
+  /**
+   * When provided, skip the next canvas-change auto-fit and apply this
+   * transform instantly instead. Used by the zoom-navigation feature for
+   * seamless enter/exit handoffs. Must be re-provided on every render
+   * where it should apply — consumers set this in the same render as the
+   * canvas change and clear it once consumed via `onHandoffApplied`.
+   */
+  handoffTransform?: ViewportState | null
+  /** Called after the handoffTransform has been applied. */
+  onHandoffApplied?: () => void
   onNodeClick: (node: ResolvedNode, event: React.MouseEvent) => void
   onNodeDoubleClick: (node: ResolvedNode, event: React.MouseEvent) => void
   onNodeNavigate: (node: ResolvedNode, event: React.MouseEvent) => void
@@ -106,6 +116,10 @@ interface ViewportProps {
 export interface ViewportHandle {
   zoomToNode: (node: ResolvedNode, onComplete?: () => void) => void
   fitToContent: (nodes: ResolvedNode[], animate?: boolean) => void
+  setTransform: (
+    transform: ViewportState,
+    options?: { animate?: boolean; durationMs?: number }
+  ) => void
   getSvgElement: () => SVGSVGElement | null
   getViewport: () => ViewportState
 }
@@ -148,10 +162,12 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
       edgeCreateEnabled,
       autoFit = 'canvas-change',
       canvasRef,
+      handoffTransform,
+      onHandoffApplied,
     },
     ref
   ) {
-    const { svgRef, groupRef, viewport, fitToContent, zoomToNode } =
+    const { svgRef, groupRef, viewport, fitToContent, zoomToNode, setTransform } =
       useViewport({
         minZoom,
         maxZoom,
@@ -175,6 +191,7 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
         zoomToNode(node, onComplete)
       },
       fitToContent,
+      setTransform,
       getSvgElement: () => svgRef.current,
       getViewport: () => viewport.current ?? { x: 0, y: 0, zoom: 1 },
     }))
@@ -248,8 +265,24 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
       const key = autoFit === 'canvas-change' ? canvasRef ?? '__root__' : 'mounted'
       if (fittedForRef.current === key) return
       fittedForRef.current = key
+      // If a zoom-navigation handoff transform was supplied for this canvas
+      // change, apply it instantly instead of fitting.
+      if (handoffTransform) {
+        setTransform(handoffTransform, { animate: false })
+        onHandoffApplied?.()
+        return
+      }
       fitNow()
-    }, [nodes, autoFit, canvasRef, defaultViewport, fitNow])
+    }, [
+      nodes,
+      autoFit,
+      canvasRef,
+      defaultViewport,
+      fitNow,
+      handoffTransform,
+      setTransform,
+      onHandoffApplied,
+    ])
 
     const editingNode = editingId
       ? renderNodes.find((n) => n.id === editingId) ?? null

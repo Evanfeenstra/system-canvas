@@ -20,6 +20,15 @@ interface UseViewportResult {
   resetZoom: () => void
   /** Animate zoom to center on a node, then call onComplete */
   zoomToNode: (node: ResolvedNode, onComplete?: () => void) => void
+  /**
+   * Imperatively set the viewport transform. When `animate` is false the
+   * transform is applied instantly (used for the seamless zoom-navigation
+   * handoff); the change still fires the onViewportChange callback.
+   */
+  setTransform: (
+    transform: ViewportState,
+    options?: { animate?: boolean; durationMs?: number }
+  ) => void
 }
 
 export function useViewport(options: UseViewportOptions): UseViewportResult {
@@ -122,6 +131,31 @@ export function useViewport(options: UseViewportOptions): UseViewportResult {
       .call(zoomBehaviorRef.current.transform as any, zoomIdentity)
   }, [])
 
+  const setTransform = useCallback(
+    (
+      transform: ViewportState,
+      options?: { animate?: boolean; durationMs?: number }
+    ) => {
+      const svg = svgRef.current
+      if (!svg || !zoomBehaviorRef.current) return
+
+      const t = zoomIdentity
+        .translate(transform.x, transform.y)
+        .scale(transform.zoom)
+
+      const sel = select(svg)
+      if (options?.animate) {
+        sel
+          .transition()
+          .duration(options.durationMs ?? 300)
+          .call(zoomBehaviorRef.current.transform as any, t)
+      } else {
+        sel.call(zoomBehaviorRef.current.transform, t)
+      }
+    },
+    []
+  )
+
   const zoomToNode = useCallback(
     (node: ResolvedNode, onComplete?: () => void) => {
       const svg = svgRef.current
@@ -157,5 +191,13 @@ export function useViewport(options: UseViewportOptions): UseViewportResult {
     []
   )
 
-  return { svgRef, groupRef, viewport, fitToContent, resetZoom, zoomToNode }
+  return {
+    svgRef,
+    groupRef,
+    viewport,
+    fitToContent,
+    resetZoom,
+    zoomToNode,
+    setTransform,
+  }
 }

@@ -38,6 +38,7 @@ function App() {
   const [themeName, setThemeName] = useState<string>('dark')
   const [edgeStyle, setEdgeStyle] = useState<'bezier' | 'straight' | 'orthogonal'>('bezier')
   const [editable, setEditable] = useState<boolean>(true)
+  const [zoomNavigation, setZoomNavigation] = useState<boolean>(true)
 
   // Hold all canvases in state. Root is stored under ROOT_KEY; sub-canvases
   // are stored under their ref strings.
@@ -186,6 +187,14 @@ function App() {
           />
           Editable
         </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <input
+            type="checkbox"
+            checked={zoomNavigation}
+            onChange={(e) => setZoomNavigation(e.target.checked)}
+          />
+          Zoom-nav
+        </label>
       </div>
 
       <SystemCanvas
@@ -194,6 +203,7 @@ function App() {
         theme={theme}
         edgeStyle={edgeStyle}
         editable={editable}
+        zoomNavigation={zoomNavigation}
         rootLabel="Organization"
         onNodeAdd={handleNodeAdd}
         onNodeUpdate={handleNodeUpdate}

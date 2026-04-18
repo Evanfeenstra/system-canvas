@@ -27,6 +27,11 @@ import { useCanvasInteraction } from '../hooks/useCanvasInteraction.js'
 import { useNodeDrag } from '../hooks/useNodeDrag.js'
 import { useNodeResize } from '../hooks/useNodeResize.js'
 import { useEdgeCreate } from '../hooks/useEdgeCreate.js'
+import {
+  useZoomNavigation,
+  type ParentFrame,
+  type ZoomNavigationConfig,
+} from '../hooks/useZoomNavigation.js'
 import { Viewport, type ViewportHandle } from './Viewport.js'
 import { Breadcrumbs } from './Breadcrumbs.js'
 import { AddNodeButton, type AddNodeButtonRenderProps } from './AddNodeButton.js'
@@ -105,6 +110,18 @@ export interface SystemCanvasProps {
    */
   autoFit?: 'canvas-change' | 'always' | 'initial' | 'never'
 
+  /**
+   * When enabled, zooming into a ref-bearing node past a threshold commits
+   * the navigation and continues seamlessly inside the sub-canvas. Zooming
+   * back out past a threshold pops to the parent. Accepts `true` for the
+   * default config, or an object to tune thresholds.
+   *
+   * Defaults to `false`. When `true` and `maxZoom` is not explicitly set,
+   * the effective max zoom is raised so small nodes can reach the enter
+   * threshold.
+   */
+  zoomNavigation?: boolean | ZoomNavigationConfig
+
   // --- Styling ---
   className?: string
   style?: React.CSSProperties
@@ -136,13 +153,44 @@ export function SystemCanvas({
   theme: themeProp,
   edgeStyle = 'bezier',
   defaultViewport,
-  minZoom = 0.1,
-  maxZoom = 4,
+  minZoom: minZoomProp,
+  maxZoom,
   onViewportChange,
   autoFit = 'canvas-change',
+  zoomNavigation = false,
   className,
   style,
 }: SystemCanvasProps) {
+  // Resolve zoom-nav config
+  const zoomNavConfig = useMemo(() => {
+    const defaults = {
+      enterThreshold: 0.7,
+      exitThreshold: 0.35,
+      prefetchThreshold: 0.4,
+      landingScale: 1.2,
+      landingPadding: 0.08,
+    }
+    if (!zoomNavigation) return { enabled: false, ...defaults }
+    if (zoomNavigation === true) return { enabled: true, ...defaults }
+    return {
+      enabled: true,
+      enterThreshold: zoomNavigation.enterThreshold ?? defaults.enterThreshold,
+      exitThreshold: zoomNavigation.exitThreshold ?? defaults.exitThreshold,
+      prefetchThreshold:
+        zoomNavigation.prefetchThreshold ?? defaults.prefetchThreshold,
+      landingScale: zoomNavigation.landingScale ?? defaults.landingScale,
+      landingPadding:
+        zoomNavigation.landingPadding ?? defaults.landingPadding,
+    }
+  }, [zoomNavigation])
+
+  // When zoom-navigation is enabled and the zoom extents are not
+  // explicitly set, widen them so (a) small nodes can be zoomed up to the
+  // enter threshold, and (b) child-canvas handoff transforms that require
+  // very small zoom to fit don't get clamped.
+  const effectiveMaxZoom = maxZoom ?? (zoomNavConfig.enabled ? 16 : 4)
+  const effectiveMinZoom =
+    minZoomProp ?? (zoomNavConfig.enabled ? 0.01 : 0.1)
   // Dev warning for missing canvases prop in editable mode
   useEffect(() => {
     const env = (globalThis as any).process?.env?.NODE_ENV
@@ -172,6 +220,38 @@ export function SystemCanvas({
     return base
   }, [themeProp, canvas.theme?.base])
 
+  // Zoom-navigation state: stack of parent frames, one per breadcrumb
+  // entry beyond root. parentFrames[i] describes how we entered the
+  // canvas at breadcrumb index i+1. Frames are populated when entering
+  // via zoom-navigation; for discrete (click) navigation they're null so
+  // zoom-exit is disabled from that canvas.
+  const [parentFrames, setParentFrames] = useState<(ParentFrame | null)[]>([])
+  const [pendingHandoff, setPendingHandoff] = useState<ViewportState | null>(
+    null
+  )
+
+  // Guard to suppress the "clear handoff" side-effect inside
+  // handleBreadcrumbClick when the breadcrumb click is a programmatic
+  // side-effect of zoom-exit (which needs the handoff preserved).
+  const suppressNextHandoffClearRef = useRef(false)
+
+  const handleBreadcrumbClick = useCallback(
+    (index: number) => {
+      // Truncate the parent-frames stack to match the new breadcrumb depth.
+      // Breadcrumb index 0 is root (no parent frame); depth of frames is
+      // `breadcrumbs.length - 1`. After clicking breadcrumb index, depth
+      // becomes `index`.
+      setParentFrames((prev) => prev.slice(0, index))
+      if (suppressNextHandoffClearRef.current) {
+        suppressNextHandoffClearRef.current = false
+      } else {
+        setPendingHandoff(null)
+      }
+      onBreadcrumbClick?.(index)
+    },
+    [onBreadcrumbClick]
+  )
+
   // Navigation state
   const {
     canvas: currentCanvas,
@@ -180,13 +260,14 @@ export function SystemCanvas({
     isLoading,
     navigateToRef,
     navigateToBreadcrumb,
+    seedCanvas,
   } = useNavigation({
     rootCanvas: canvas,
     rootLabel,
     canvases,
     onResolveCanvas,
     onNavigate,
-    onBreadcrumbClick,
+    onBreadcrumbClick: handleBreadcrumbClick,
   })
 
   // Resolve canvas data (apply theme, categories, defaults)
@@ -261,9 +342,13 @@ export function SystemCanvas({
       onCreate: handleEdgeCreated,
     })
 
-  // Zoom-then-navigate: animate toward the node, then swap canvas
+  // Zoom-then-navigate: animate toward the node, then swap canvas.
+  // Discrete-click navigation does not populate a parent-frame so
+  // zoom-exit from the new canvas is disabled (user can still use the
+  // breadcrumb).
   const handleNavigableNodeClick = useCallback(
     (node: ResolvedNode) => {
+      setParentFrames((prev) => [...prev, null])
       const handle = viewportHandleRef.current
       if (handle) {
         handle.zoomToNode(node, () => {
@@ -275,6 +360,82 @@ export function SystemCanvas({
     },
     [navigateToRef]
   )
+
+  // --- Zoom-navigation enter/exit handlers ---
+  const handleZoomEnter = useCallback(
+    (node: ResolvedNode, targetTransform: ViewportState) => {
+      const frame: ParentFrame = {
+        parentCanvasRef: currentCanvasRef,
+        parentNodeRect: {
+          x: node.x,
+          y: node.y,
+          width: node.width,
+          height: node.height,
+        },
+      }
+      setParentFrames((prev) => [...prev, frame])
+      setPendingHandoff(targetTransform)
+      // Fire the existing navigation flow. Because the data is already
+      // resolved synchronously (the hook only fires when data is
+      // available), this completes in a single tick.
+      navigateToRef(node)
+    },
+    [currentCanvasRef, navigateToRef]
+  )
+
+  const handleZoomExit = useCallback(
+    (targetTransform: ViewportState) => {
+      setPendingHandoff(targetTransform)
+      // Mark the next breadcrumb click as programmatic so its handler
+      // doesn't wipe our freshly-set pending handoff.
+      suppressNextHandoffClearRef.current = true
+      // navigateToBreadcrumb triggers handleBreadcrumbClick which is
+      // responsible for truncating parentFrames to match.
+      navigateToBreadcrumb(breadcrumbs.length - 2)
+    },
+    [navigateToBreadcrumb, breadcrumbs.length]
+  )
+
+  // Current parent frame (top of the stack) — enables zoom-exit from this
+  // canvas only if we entered via zoom-navigation.
+  const currentParentFrame = parentFrames[parentFrames.length - 1] ?? null
+
+  const {
+    handleViewportChange: handleZoomNavViewportChange,
+    clearCommitting: clearZoomNavCommitting,
+  } = useZoomNavigation({
+    enabled: zoomNavConfig.enabled,
+    config: zoomNavConfig,
+    nodes,
+    currentCanvas,
+    parentFrame: currentParentFrame,
+    canvases,
+    onResolveCanvas,
+    onSeedCanvas: seedCanvas,
+    theme,
+    getViewportSize: () => {
+      const svg = viewportHandleRef.current?.getSvgElement()
+      if (!svg) return null
+      const rect = svg.getBoundingClientRect()
+      return { width: rect.width, height: rect.height }
+    },
+    onEnter: handleZoomEnter,
+    onExit: handleZoomExit,
+  })
+
+  const handleViewportChange = useCallback(
+    (vp: ViewportState) => {
+      viewportStateRef.current = vp
+      handleZoomNavViewportChange(vp)
+      onViewportChange?.(vp)
+    },
+    [handleZoomNavViewportChange, onViewportChange]
+  )
+
+  const handleHandoffApplied = useCallback(() => {
+    setPendingHandoff(null)
+    clearZoomNavCommitting()
+  }, [clearZoomNavCommitting])
 
   const handleBeginEdit = useCallback((node: ResolvedNode) => {
     setEditingId(node.id)
@@ -479,15 +640,14 @@ export function SystemCanvas({
         nodeMap={nodeMap}
         theme={theme}
         edgeStyle={edgeStyle}
-        minZoom={minZoom}
-        maxZoom={maxZoom}
+        minZoom={effectiveMinZoom}
+        maxZoom={effectiveMaxZoom}
         defaultViewport={defaultViewport}
         autoFit={autoFit}
         canvasRef={currentCanvasRef}
-        onViewportChange={(vp) => {
-          viewportStateRef.current = vp
-          onViewportChange?.(vp)
-        }}
+        handoffTransform={pendingHandoff}
+        onHandoffApplied={handleHandoffApplied}
+        onViewportChange={handleViewportChange}
         onNodeClick={handleNodeClick}
         onNodeDoubleClick={handleNodeDoubleClick}
         onNodeNavigate={handleNodeNavigate}

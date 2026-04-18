@@ -50,9 +50,12 @@ export {
   computeEdgeMidpoint,
   computeBoundingBox,
   fitToBounds,
+  fitBoundsIntoRect,
+  canvasRectToScreenRect,
   screenToCanvas,
   canvasToScreen,
 } from './rendering/index.js'
+export type { Rect } from './rendering/index.js'
 
 // Canvas helpers
 export {
