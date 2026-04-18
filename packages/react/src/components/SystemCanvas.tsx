@@ -346,12 +346,20 @@ export function SystemCanvas({
     })
 
   // Zoom-then-navigate: animate toward the node, then swap canvas.
-  // Discrete-click navigation does not populate a parent-frame so
-  // zoom-exit from the new canvas is disabled (user can still use the
-  // breadcrumb).
+  // Also stash a parent frame so zoom-exit works on the way back out
+  // (even though the entry was a click rather than a zoom).
   const handleNavigableNodeClick = useCallback(
     (node: ResolvedNode) => {
-      setParentFrames((prev) => [...prev, null])
+      const frame: ParentFrame = {
+        parentCanvasRef: currentCanvasRef,
+        parentNodeRect: {
+          x: node.x,
+          y: node.y,
+          width: node.width,
+          height: node.height,
+        },
+      }
+      setParentFrames((prev) => [...prev, frame])
       const handle = viewportHandleRef.current
       if (handle) {
         handle.zoomToNode(node, () => {
@@ -361,7 +369,7 @@ export function SystemCanvas({
         navigateToRef(node)
       }
     },
-    [navigateToRef]
+    [navigateToRef, currentCanvasRef]
   )
 
   // --- Zoom-navigation enter/exit handlers ---
