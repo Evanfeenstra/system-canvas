@@ -126,6 +126,7 @@ export function TextNode({
           size={14}
           color={node.resolvedStroke}
           opacity={0.7}
+          customIcons={theme.icons}
         />
       )}
     </g>

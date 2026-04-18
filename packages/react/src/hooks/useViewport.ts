@@ -43,12 +43,18 @@ export function useViewport(options: UseViewportOptions): UseViewportResult {
       .scaleExtent([minZoom, maxZoom])
       // Don't start pan/zoom when the gesture begins on a node — that's a
       // node drag. d3-zoom's default filter lets through most events; we
-      // extend it to also reject events originating inside a node.
+      // extend it to also reject drag-starting events originating inside
+      // a node. Wheel events are always allowed so scroll-to-zoom works
+      // anywhere over the canvas, even when the cursor is over a node.
       .filter((event) => {
         // Mirror d3-zoom's default rules for the things we still want to
-        // honor (ignore ctrl+wheel/secondary buttons etc.).
-        if (event.ctrlKey && event.type === 'wheel') return false
+        // honor (ignore secondary buttons etc.). Note: we intentionally
+        // don't block ctrl+wheel — letting it through matches d3-zoom's
+        // default (native pinch gestures come through as ctrl+wheel).
         if (event.button) return false
+        // Wheel events always pass through — zooming should work regardless
+        // of what's under the cursor.
+        if (event.type === 'wheel') return true
         const target = event.target as Element | null
         if (target && typeof target.closest === 'function') {
           if (target.closest('.system-canvas-node')) return false

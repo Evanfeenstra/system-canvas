@@ -7,6 +7,12 @@ interface NodeIconProps {
   size?: number
   color: string
   opacity?: number
+  /**
+   * Custom icon map, merged over the built-in set. Entries here win over
+   * built-ins of the same name, so themes can both extend and override.
+   * Path data is expected in a 16x16 coordinate space.
+   */
+  customIcons?: Record<string, string[]>
 }
 
 /**
@@ -20,8 +26,9 @@ export function NodeIcon({
   size = 14,
   color,
   opacity = 0.7,
+  customIcons,
 }: NodeIconProps) {
-  const pathData = iconPaths[icon]
+  const pathData = customIcons?.[icon] ?? iconPaths[icon]
   if (!pathData) return null
 
   return (

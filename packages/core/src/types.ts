@@ -180,6 +180,13 @@ export interface CanvasTheme {
   presetColors: Record<string, PresetColor>
   /** Map category strings to visual definitions */
   categories: Record<string, CategoryDefinition>
+  /**
+   * Custom icons, merged over the built-in icon set. Each value is an array
+   * of SVG path `d` strings authored in a 16x16 coordinate space — matching
+   * the coordinate system used by the built-in icons. Useful for shipping
+   * domain-specific glyphs via the theme without forking the library.
+   */
+  icons?: Record<string, string[]>
 }
 
 // ---------------------------------------------------------------------------

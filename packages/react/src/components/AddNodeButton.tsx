@@ -227,6 +227,7 @@ function MenuRow({
                   size={14}
                   color={option.stroke ?? theme.breadcrumbs.activeColor}
                   opacity={0.9}
+                  customIcons={theme.icons}
                 />
               </g>
             </svg>

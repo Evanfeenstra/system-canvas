@@ -82,6 +82,17 @@ Two resolution paths for sub-canvas data (in priority order):
 
 Breadcrumbs allow navigating back up. The library exposes `currentCanvasRef` (the ref of the currently-viewed canvas, `undefined` at root) so editing callbacks can identify which entry in the consumer's canvases map to mutate.
 
+### Viewport & auto-fit
+
+The viewport is driven by d3-zoom. `defaultViewport` (optional) sets the initial pan/zoom and suppresses all auto-fit behavior. Without it, the `autoFit` prop controls when the viewport re-centers to the visible content:
+
+- `'canvas-change'` (default) — fit on initial mount and when navigating to a different canvas. Edits (add / move / resize / delete) do **not** re-fit. This is the typical UX for editable canvases: the view stays stable while the user works.
+- `'always'` — fit on every change to the nodes array, including after every edit. Legacy behavior; useful for read-only dashboards whose data streams in.
+- `'initial'` — fit once on mount only. Navigation between sub-canvases keeps the current pan/zoom (usually not what you want).
+- `'never'` — no auto-fit. Consumer is fully responsible for the viewport.
+
+Navigation zoom-to-node animations set an internal flag that makes the very next fit instant (no animation), so the zoom-in-and-snap sequence looks continuous.
+
 ### Editing model
 
 The library is stateless with respect to canvas data. When `editable` is true, it emits granular mutation callbacks; the consumer owns `CanvasData` and passes the updated object back as the `canvas` prop (or via the `canvases` map for sub-canvases).

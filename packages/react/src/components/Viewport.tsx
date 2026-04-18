@@ -54,6 +54,16 @@ interface ViewportProps {
   maxZoom: number
   defaultViewport?: ViewportState
   onViewportChange?: (viewport: ViewportState) => void
+  /**
+   * Controls when the viewport auto-fits.
+   * See SystemCanvasProps['autoFit'] for semantics.
+   */
+  autoFit?: 'canvas-change' | 'always' | 'initial' | 'never'
+  /**
+   * Ref of the currently-viewed canvas (undefined at root). Used as the
+   * trigger key for `autoFit === 'canvas-change'`.
+   */
+  canvasRef?: string
   onNodeClick: (node: ResolvedNode, event: React.MouseEvent) => void
   onNodeDoubleClick: (node: ResolvedNode, event: React.MouseEvent) => void
   onNodeNavigate: (node: ResolvedNode, event: React.MouseEvent) => void
@@ -136,6 +146,8 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
       pendingEdge,
       onConnectionHandlePointerDown,
       edgeCreateEnabled,
+      autoFit = 'canvas-change',
+      canvasRef,
     },
     ref
   ) {
@@ -191,16 +203,53 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
       return m
     }, [renderNodes, nodeMap, dragOverrides, resizeOverrides])
 
-    // Fit to content on initial render and when nodes change
+    // Keep a ref to the latest nodes so auto-fit effects can read them
+    // without taking `nodes` as a dependency (which would re-fit on every edit).
+    const latestNodesRef = useRef(nodes)
     useEffect(() => {
-      if (nodes.length > 0 && !defaultViewport) {
-        const animate = !navigatingRef.current
-        navigatingRef.current = false
-        requestAnimationFrame(() => {
-          fitToContent(nodes, animate)
-        })
-      }
-    }, [nodes, fitToContent, defaultViewport])
+      latestNodesRef.current = nodes
+    }, [nodes])
+
+    // Auto-fit to content. Behavior controlled by the `autoFit` prop:
+    //   - 'always': fit whenever nodes change (legacy behavior).
+    //   - 'canvas-change': fit on mount and when the canvas ref changes.
+    //   - 'initial': fit once on mount.
+    //   - 'never': no auto-fit.
+    //
+    // `defaultViewport` always suppresses auto-fit, regardless of mode.
+    const fitNow = useCallback(() => {
+      const current = latestNodesRef.current
+      if (current.length === 0) return
+      const animate = !navigatingRef.current
+      navigatingRef.current = false
+      requestAnimationFrame(() => {
+        fitToContent(current, animate)
+      })
+    }, [fitToContent])
+
+    // 'always' mode: re-fit whenever the nodes array identity changes.
+    useEffect(() => {
+      if (defaultViewport) return
+      if (autoFit !== 'always') return
+      if (nodes.length === 0) return
+      fitNow()
+    }, [nodes, autoFit, defaultViewport, fitNow])
+
+    // For 'canvas-change' and 'initial' modes, track whether we've already
+    // done the one fit for the current canvas. Reset when canvasRef changes
+    // (canvas-change mode) so navigation re-fits.
+    const fittedForRef = useRef<string | undefined | null>(null)
+    useEffect(() => {
+      if (defaultViewport) return
+      if (autoFit !== 'canvas-change' && autoFit !== 'initial') return
+      if (nodes.length === 0) return
+      // Key we compare against: the current canvasRef for 'canvas-change',
+      // or the string 'mounted' for 'initial' (never changes, so only one fit).
+      const key = autoFit === 'canvas-change' ? canvasRef ?? '__root__' : 'mounted'
+      if (fittedForRef.current === key) return
+      fittedForRef.current = key
+      fitNow()
+    }, [nodes, autoFit, canvasRef, defaultViewport, fitNow])
 
     const editingNode = editingId
       ? renderNodes.find((n) => n.id === editingId) ?? null

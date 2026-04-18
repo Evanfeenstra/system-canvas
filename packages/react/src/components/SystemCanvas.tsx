@@ -91,6 +91,19 @@ export interface SystemCanvasProps {
   minZoom?: number
   maxZoom?: number
   onViewportChange?: (viewport: ViewportState) => void
+  /**
+   * Controls when the viewport auto-fits to the visible content.
+   *
+   * - `'canvas-change'` (default): fit on initial mount and when navigating
+   *   to a different canvas. Edits (add / move / resize / delete) do NOT
+   *   trigger a re-fit.
+   * - `'always'`: fit on initial mount and whenever the node set changes,
+   *   including after every edit. This is the legacy behavior.
+   * - `'initial'`: fit once on initial mount only.
+   * - `'never'`: do not auto-fit. Use `defaultViewport` and/or manual
+   *   control via consumer-managed viewport state.
+   */
+  autoFit?: 'canvas-change' | 'always' | 'initial' | 'never'
 
   // --- Styling ---
   className?: string
@@ -126,6 +139,7 @@ export function SystemCanvas({
   minZoom = 0.1,
   maxZoom = 4,
   onViewportChange,
+  autoFit = 'canvas-change',
   className,
   style,
 }: SystemCanvasProps) {
@@ -468,6 +482,8 @@ export function SystemCanvas({
         minZoom={minZoom}
         maxZoom={maxZoom}
         defaultViewport={defaultViewport}
+        autoFit={autoFit}
+        canvasRef={currentCanvasRef}
         onViewportChange={(vp) => {
           viewportStateRef.current = vp
           onViewportChange?.(vp)
