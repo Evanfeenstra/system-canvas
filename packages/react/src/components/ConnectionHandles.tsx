@@ -18,8 +18,8 @@ interface ConnectionHandlesProps {
 }
 
 const SIDES: Side[] = ['top', 'right', 'bottom', 'left']
-const HANDLE_RADIUS = 5
-const HANDLE_HIT_RADIUS = 9
+const HANDLE_RADIUS = 4
+const HANDLE_HIT_RADIUS = 10
 const FADE_DELAY_MS = 300
 const FADE_DURATION_MS = 150
 
@@ -28,7 +28,8 @@ const FADE_DURATION_MS = 150
  * Pressing a handle begins an edge-creation drag.
  *
  * Fades in after a 300ms delay to avoid flashing during mouse fly-throughs.
- * A wider invisible hit circle makes the handles easier to grab.
+ * Handles are solid-filled in the node's own stroke color; hovering an
+ * individual handle grows it slightly.
  */
 export function ConnectionHandles({
   node,
@@ -36,10 +37,8 @@ export function ConnectionHandles({
   onHandlePointerDown,
   immediate,
 }: ConnectionHandlesProps) {
-  // `visible` drives a CSS opacity transition. We start at 0, then after the
-  // delay set it to 1 so the transition runs. Keyed on node.id so moving to a
-  // different node restarts the timer.
   const [visible, setVisible] = useState<boolean>(!!immediate)
+  const [hoveredSide, setHoveredSide] = useState<Side | null>(null)
 
   useEffect(() => {
     if (immediate) {
@@ -50,6 +49,8 @@ export function ConnectionHandles({
     const t = window.setTimeout(() => setVisible(true), FADE_DELAY_MS)
     return () => window.clearTimeout(t)
   }, [node.id, immediate])
+
+  const handleColor = node.resolvedStroke ?? theme.node.labelColor
 
   return (
     <g
@@ -62,10 +63,13 @@ export function ConnectionHandles({
     >
       {SIDES.map((side) => {
         const { x, y } = computeAnchorPoint(node, side)
+        const isHovered = hoveredSide === side
         return (
           <g
             key={side}
             style={{ cursor: 'crosshair' }}
+            onPointerEnter={() => setHoveredSide(side)}
+            onPointerLeave={() => setHoveredSide((s) => (s === side ? null : s))}
             onPointerDown={(e) => {
               // Stop propagation so the node's own drag/click doesn't fire.
               e.stopPropagation()
@@ -74,14 +78,11 @@ export function ConnectionHandles({
           >
             {/* Invisible wider hit target */}
             <circle cx={x} cy={y} r={HANDLE_HIT_RADIUS} fill="transparent" />
-            {/* Visible dot */}
             <circle
               cx={x}
               cy={y}
-              r={HANDLE_RADIUS}
-              fill={theme.background}
-              stroke={theme.node.labelColor}
-              strokeWidth={1.5}
+              r={isHovered ? HANDLE_RADIUS + 1 : HANDLE_RADIUS}
+              fill={handleColor}
               pointerEvents="none"
             />
           </g>

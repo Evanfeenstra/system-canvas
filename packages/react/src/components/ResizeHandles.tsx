@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import type { ResolvedNode, CanvasTheme } from 'system-canvas'
 import type { ResizeCorner } from '../hooks/useNodeResize.js'
 
@@ -12,7 +12,7 @@ interface ResizeHandlesProps {
   ) => void
 }
 
-const HANDLE_SIZE = 8
+const HANDLE_SIZE = 7
 
 const CORNERS: { corner: ResizeCorner; cursor: string; anchor: 'nw' | 'ne' | 'sw' | 'se' }[] = [
   { corner: 'nw', cursor: 'nwse-resize', anchor: 'nw' },
@@ -26,12 +26,14 @@ const CORNERS: { corner: ResizeCorner; cursor: string; anchor: 'nw' | 'ne' | 'sw
  * on a handle starts a resize gesture.
  *
  * Placed inside the node's <g> but rendered AFTER the ref indicator so it
- * sits on top of any carved corner.
+ * sits on top of any carved corner. Solid-filled in the node's own stroke
+ * color so they read as part of the node; the hovered corner grows slightly.
  */
 export function ResizeHandles({ node, theme, onHandlePointerDown }: ResizeHandlesProps) {
   const { x, y, width, height } = node
-  const s = HANDLE_SIZE
-  const half = s / 2
+  const [hoveredCorner, setHoveredCorner] = useState<ResizeCorner | null>(null)
+
+  const handleColor = node.resolvedStroke ?? theme.node.labelColor
 
   const anchorPos = (anchor: 'nw' | 'ne' | 'sw' | 'se') => {
     switch (anchor) {
@@ -50,6 +52,9 @@ export function ResizeHandles({ node, theme, onHandlePointerDown }: ResizeHandle
     <g className="system-canvas-resize-handles" pointerEvents="all">
       {CORNERS.map(({ corner, cursor, anchor }) => {
         const { cx, cy } = anchorPos(anchor)
+        const isHovered = hoveredCorner === corner
+        const s = isHovered ? HANDLE_SIZE + 2 : HANDLE_SIZE
+        const half = s / 2
         return (
           <rect
             key={corner}
@@ -57,10 +62,12 @@ export function ResizeHandles({ node, theme, onHandlePointerDown }: ResizeHandle
             y={cy - half}
             width={s}
             height={s}
-            fill={theme.background}
-            stroke={theme.node.labelColor}
-            strokeWidth={1.5}
+            fill={handleColor}
             style={{ cursor }}
+            onPointerEnter={() => setHoveredCorner(corner)}
+            onPointerLeave={() =>
+              setHoveredCorner((c) => (c === corner ? null : c))
+            }
             onPointerDown={(e) => onHandlePointerDown(node, corner, e)}
             onClick={(e) => e.stopPropagation()}
             onDoubleClick={(e) => e.stopPropagation()}

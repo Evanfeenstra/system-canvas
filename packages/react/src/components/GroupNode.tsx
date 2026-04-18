@@ -53,23 +53,6 @@ export function GroupNode({
         strokeDasharray={theme.group.strokeDasharray}
       />
 
-      {/* Selection outline */}
-      {isSelected && (
-        <rect
-          x={x - 3}
-          y={y - 3}
-          width={width + 6}
-          height={height + 6}
-          rx={theme.group.cornerRadius + 3}
-          fill="none"
-          stroke={theme.node.labelColor}
-          strokeWidth={1.5}
-          strokeDasharray="4,3"
-          opacity={0.6}
-          pointerEvents="none"
-        />
-      )}
-
       {/* Label in top-left */}
       {!isEditing && node.label && (
         <text

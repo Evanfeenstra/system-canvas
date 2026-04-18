@@ -67,23 +67,6 @@ export function LinkNode({
         strokeWidth={theme.node.strokeWidth}
       />
 
-      {/* Selection outline */}
-      {isSelected && (
-        <rect
-          x={x - 3}
-          y={y - 3}
-          width={width + 6}
-          height={height + 6}
-          rx={node.resolvedCornerRadius + 3}
-          fill="none"
-          stroke={theme.node.labelColor}
-          strokeWidth={1.5}
-          strokeDasharray="4,3"
-          opacity={0.6}
-          pointerEvents="none"
-        />
-      )}
-
       {/* Link icon */}
       {!isEditing && (
         <text

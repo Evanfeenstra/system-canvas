@@ -108,23 +108,6 @@ export function FileNode({
         opacity={0.5}
       />
 
-      {/* Selection outline */}
-      {isSelected && (
-        <rect
-          x={x - 3}
-          y={y - 3}
-          width={width + 6}
-          height={height + 6}
-          rx={4}
-          fill="none"
-          stroke={theme.node.labelColor}
-          strokeWidth={1.5}
-          strokeDasharray="4,3"
-          opacity={0.6}
-          pointerEvents="none"
-        />
-      )}
-
       {/* Clipped text group */}
       {!isEditing && (
       <g clipPath={`url(#${clipId})`}>
