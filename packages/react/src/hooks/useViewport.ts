@@ -42,6 +42,11 @@ export function useViewport(options: UseViewportOptions): UseViewportResult {
   const zoomBehaviorRef = useRef<ZoomBehavior<SVGSVGElement, unknown> | null>(
     null
   )
+  // Keep the latest onViewportChange in a ref so the d3-zoom handler
+  // (which is installed once) always calls the current callback rather
+  // than the one captured on mount.
+  const onViewportChangeRef = useRef(onViewportChange)
+  onViewportChangeRef.current = onViewportChange
 
   useEffect(() => {
     const svg = svgRef.current
@@ -76,7 +81,7 @@ export function useViewport(options: UseViewportOptions): UseViewportResult {
         const { x, y, k } = event.transform
         group.setAttribute('transform', `translate(${x},${y}) scale(${k})`)
         viewport.current = { x, y, zoom: k }
-        onViewportChange?.({ x, y, zoom: k })
+        onViewportChangeRef.current?.({ x, y, zoom: k })
       })
 
     zoomBehaviorRef.current = zoomBehavior

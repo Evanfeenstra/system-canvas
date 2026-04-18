@@ -53,6 +53,12 @@ export interface ZoomNavigationConfig {
    * rect. Default 0.08 (8%).
    */
   landingPadding?: number
+  /**
+   * Duration in milliseconds of the opacity fade-in applied to the new
+   * canvas after a zoom-enter or zoom-exit handoff. Set to 0 to disable
+   * fade entirely. Default 200.
+   */
+  fadeDuration?: number
 }
 
 interface UseZoomNavigationOptions {

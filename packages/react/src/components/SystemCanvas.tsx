@@ -165,10 +165,11 @@ export function SystemCanvas({
   const zoomNavConfig = useMemo(() => {
     const defaults = {
       enterThreshold: 0.7,
-      exitThreshold: 0.35,
+      exitThreshold: 0.2,
       prefetchThreshold: 0.4,
       landingScale: 1.2,
       landingPadding: 0.08,
+      fadeDuration: 200,
     }
     if (!zoomNavigation) return { enabled: false, ...defaults }
     if (zoomNavigation === true) return { enabled: true, ...defaults }
@@ -181,6 +182,8 @@ export function SystemCanvas({
       landingScale: zoomNavigation.landingScale ?? defaults.landingScale,
       landingPadding:
         zoomNavigation.landingPadding ?? defaults.landingPadding,
+      fadeDuration:
+        zoomNavigation.fadeDuration ?? defaults.fadeDuration,
     }
   }, [zoomNavigation])
 
@@ -647,6 +650,7 @@ export function SystemCanvas({
         canvasRef={currentCanvasRef}
         handoffTransform={pendingHandoff}
         onHandoffApplied={handleHandoffApplied}
+        handoffFadeMs={zoomNavConfig.fadeDuration}
         onViewportChange={handleViewportChange}
         onNodeClick={handleNodeClick}
         onNodeDoubleClick={handleNodeDoubleClick}
