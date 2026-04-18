@@ -36,6 +36,14 @@ import type { PendingEdgeState } from '../hooks/useEdgeCreate.js'
  */
 const HOVER_PADDING = 10
 
+/**
+ * A connection handle is shown only when the cursor is within this many
+ * pixels (canvas-space) of the node's perimeter on the nearest side.
+ * Deeper into the node's interior and no handle appears, so the user can
+ * freely click/drag the node body without a handle flashing in.
+ */
+const EDGE_PROXIMITY = 16
+
 interface ViewportProps {
   nodes: ResolvedNode[]
   edges: CanvasEdge[]
@@ -145,6 +153,9 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
 
     // Hovered node id — used to render connection handles in editable mode.
     const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null)
+    // Side of the hovered node the cursor is closest to — only that side's
+    // handle is shown. Null when no hover is active.
+    const [hoveredSide, setHoveredSide] = useState<Side | null>(null)
 
     useImperativeHandle(ref, () => ({
       zoomToNode: (node, onComplete) => {
@@ -227,12 +238,45 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
         }
         const next = hit?.id ?? null
         setHoveredNodeId((prev) => (prev === next ? prev : next))
+
+        // Determine which side of the hovered node the cursor is closest
+        // to, and only expose it if the cursor is within EDGE_PROXIMITY of
+        // that side's edge. The distance is signed-from-perimeter: inside
+        // the rect we use the perpendicular distance to each edge; outside
+        // we fall back to the same absolute distance (still works because
+        // the hovered node was already expanded by HOVER_PADDING). This
+        // means the node's center is a dead zone where no handle shows.
+        if (hit) {
+          const dTop = Math.abs(y - hit.y)
+          const dBottom = Math.abs(y - (hit.y + hit.height))
+          const dLeft = Math.abs(x - hit.x)
+          const dRight = Math.abs(x - (hit.x + hit.width))
+          let side: Side = 'top'
+          let min = dTop
+          if (dRight < min) {
+            side = 'right'
+            min = dRight
+          }
+          if (dBottom < min) {
+            side = 'bottom'
+            min = dBottom
+          }
+          if (dLeft < min) {
+            side = 'left'
+            min = dLeft
+          }
+          const next = min <= EDGE_PROXIMITY ? side : null
+          setHoveredSide((prev) => (prev === next ? prev : next))
+        } else {
+          setHoveredSide((prev) => (prev === null ? prev : null))
+        }
       },
       [edgeCreateEnabled, renderNodes, svgRef, viewport]
     )
 
     const handleSvgPointerLeave = useCallback(() => {
       setHoveredNodeId(null)
+      setHoveredSide(null)
     }, [])
 
     // Node to show connection handles on: the hovered node, unless a drag
@@ -274,6 +318,10 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
           height: '100%',
           display: 'block',
           background: theme.background,
+          userSelect: 'none',
+          WebkitUserSelect: 'none',
+          MozUserSelect: 'none',
+          msUserSelect: 'none',
         }}
         onClick={onCanvasClick}
         onContextMenu={onCanvasContextMenu}
@@ -389,6 +437,7 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
               theme={theme}
               onHandlePointerDown={onConnectionHandlePointerDown}
               immediate={!!pendingEdge}
+              activeSide={hoveredSide}
             />
           )}
 

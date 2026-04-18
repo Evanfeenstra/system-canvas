@@ -42,7 +42,12 @@ export function EdgeRenderer({
 }: EdgeRendererProps) {
   return (
     <>
-      {/* Arrowhead marker definitions: default + selected variant */}
+      {/* Arrowhead marker definition. Uses `context-stroke` so the polygon
+          inherits the stroke color of whichever path references it — that
+          way one marker serves edges of any color (theme default, preset
+          color, or selected highlight) without us needing a marker per
+          color. Selected edges already set their path stroke to the
+          high-contrast label color, so the arrow follows along. */}
       <defs>
         <marker
           id="system-canvas-arrowhead"
@@ -55,26 +60,28 @@ export function EdgeRenderer({
         >
           <polygon
             points={`0 0, ${theme.edge.arrowSize} ${theme.edge.arrowSize * 0.35}, 0 ${theme.edge.arrowSize * 0.7}`}
-            fill={theme.edge.stroke}
-          />
-        </marker>
-        <marker
-          id="system-canvas-arrowhead-selected"
-          markerWidth={theme.edge.arrowSize}
-          markerHeight={theme.edge.arrowSize * 0.7}
-          refX={theme.edge.arrowSize - 1}
-          refY={theme.edge.arrowSize * 0.35}
-          orient="auto"
-          markerUnits="userSpaceOnUse"
-        >
-          <polygon
-            points={`0 0, ${theme.edge.arrowSize} ${theme.edge.arrowSize * 0.35}, 0 ${theme.edge.arrowSize * 0.7}`}
-            fill={theme.node.labelColor}
+            fill="context-stroke"
           />
         </marker>
       </defs>
 
-      {edges.map((edge) => {
+      {/* Stable-sort so edges using the theme's default stroke render first
+          (behind), and edges with an explicit color render on top. Selected
+          edges are bumped to the very top so they're always fully visible.
+          The underlying `edges` array is not mutated. */}
+      {[...edges]
+        .map((edge, i) => ({ edge, i }))
+        .sort((a, b) => {
+          const aSel = selectedId === a.edge.id ? 2 : 0
+          const bSel = selectedId === b.edge.id ? 2 : 0
+          const aCol = a.edge.color ? 1 : 0
+          const bCol = b.edge.color ? 1 : 0
+          const aRank = aSel + aCol
+          const bRank = bSel + bCol
+          if (aRank !== bRank) return aRank - bRank
+          return a.i - b.i
+        })
+        .map(({ edge }) => {
         const fromNode = nodeMap.get(edge.fromNode)
         const toNode = nodeMap.get(edge.toNode)
         if (!fromNode || !toNode) return null
@@ -96,9 +103,7 @@ export function EdgeRenderer({
 
         const toEnd = edge.toEnd ?? 'arrow'
         const fromEnd = edge.fromEnd ?? 'none'
-        const arrowId = isSelected
-          ? 'system-canvas-arrowhead-selected'
-          : 'system-canvas-arrowhead'
+        const arrowId = 'system-canvas-arrowhead'
 
         return (
           <g

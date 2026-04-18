@@ -15,6 +15,13 @@ interface ConnectionHandlesProps {
    * immediately (used while a connection drag is already in progress).
    */
   immediate?: boolean
+  /**
+   * Which side (if any) is currently closest to the cursor. When set, only
+   * that side's handle is rendered. When null/undefined, no side-handles
+   * render (unless `immediate` is true, in which case all four render so the
+   * source handle remains visible during a drag).
+   */
+  activeSide?: Side | null
 }
 
 const SIDES: Side[] = ['top', 'right', 'bottom', 'left']
@@ -22,6 +29,13 @@ const HANDLE_RADIUS = 4
 const HANDLE_HIT_RADIUS = 10
 const FADE_DELAY_MS = 300
 const FADE_DURATION_MS = 150
+/**
+ * Scale factor applied to the handle circle when the pointer is directly
+ * over it. Animated via CSS `transform` (SVG's `r` attribute can't be
+ * CSS-transitioned reliably across browsers, but `transform` can).
+ */
+const HOVER_SCALE = 1.42
+const HOVER_TRANSITION_MS = 120
 
 /**
  * Four small circular handles, one centered on each side of the node.
@@ -36,6 +50,7 @@ export function ConnectionHandles({
   theme,
   onHandlePointerDown,
   immediate,
+  activeSide,
 }: ConnectionHandlesProps) {
   const [visible, setVisible] = useState<boolean>(!!immediate)
   const [hoveredSide, setHoveredSide] = useState<Side | null>(null)
@@ -52,6 +67,15 @@ export function ConnectionHandles({
 
   const handleColor = node.resolvedStroke ?? theme.node.labelColor
 
+  // While a drag is in progress (`immediate`), render all four sides so the
+  // source handle stays put. Otherwise render only the side closest to the
+  // cursor (or nothing when no side is active).
+  const sidesToRender: Side[] = immediate
+    ? SIDES
+    : activeSide
+      ? [activeSide]
+      : []
+
   return (
     <g
       className="system-canvas-connection-handles"
@@ -61,7 +85,7 @@ export function ConnectionHandles({
         transition: `opacity ${FADE_DURATION_MS}ms ease-out`,
       }}
     >
-      {SIDES.map((side) => {
+      {sidesToRender.map((side) => {
         const { x, y } = computeAnchorPoint(node, side)
         const isHovered = hoveredSide === side
         return (
@@ -81,9 +105,17 @@ export function ConnectionHandles({
             <circle
               cx={x}
               cy={y}
-              r={isHovered ? HANDLE_RADIUS + 1 : HANDLE_RADIUS}
+              r={HANDLE_RADIUS}
               fill={handleColor}
               pointerEvents="none"
+              style={{
+                // Scale around the handle's own center. CSS transforms on
+                // SVG elements use the element's user-space origin by
+                // default, so we set transform-origin explicitly.
+                transformOrigin: `${x}px ${y}px`,
+                transform: isHovered ? `scale(${HOVER_SCALE})` : 'scale(1)',
+                transition: `transform ${HOVER_TRANSITION_MS}ms ease-out`,
+              }}
             />
           </g>
         )

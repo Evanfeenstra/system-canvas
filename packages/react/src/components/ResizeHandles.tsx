@@ -13,6 +13,20 @@ interface ResizeHandlesProps {
 }
 
 const HANDLE_SIZE = 7
+/**
+ * Corners are nudged inward along both axes so that, with rounded node
+ * corners, the handle square visually sits inside the curve rather than
+ * straddling it (which otherwise leaves a stub poking out past the rounded
+ * edge). The inset scales with the node's own resolved corner radius,
+ * clamped so it's never zero and never so large it crowds small nodes.
+ *
+ * Small corners (r≤6) → 1px inset (floor).
+ * Groups (r≈12) → ~6px inset.
+ */
+const computeCornerInset = (cornerRadius: number) => {
+  if (cornerRadius <= 6) return 1
+  return Math.min(cornerRadius * 0.5, 8)
+}
 
 const CORNERS: { corner: ResizeCorner; cursor: string; anchor: 'nw' | 'ne' | 'sw' | 'se' }[] = [
   { corner: 'nw', cursor: 'nwse-resize', anchor: 'nw' },
@@ -35,16 +49,17 @@ export function ResizeHandles({ node, theme, onHandlePointerDown }: ResizeHandle
 
   const handleColor = node.resolvedStroke ?? theme.node.labelColor
 
+  const i = computeCornerInset(node.resolvedCornerRadius)
   const anchorPos = (anchor: 'nw' | 'ne' | 'sw' | 'se') => {
     switch (anchor) {
       case 'nw':
-        return { cx: x, cy: y }
+        return { cx: x + i, cy: y + i }
       case 'ne':
-        return { cx: x + width, cy: y }
+        return { cx: x + width - i, cy: y + i }
       case 'sw':
-        return { cx: x, cy: y + height }
+        return { cx: x + i, cy: y + height - i }
       case 'se':
-        return { cx: x + width, cy: y + height }
+        return { cx: x + width - i, cy: y + height - i }
     }
   }
 

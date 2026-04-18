@@ -38,20 +38,30 @@ interface UseEdgeCreateResult {
 }
 
 /**
- * Return the topmost non-group node whose bounds contain (x, y).
- * Groups are never valid drop targets for edge creation.
+ * Padding added around each node's rect when hit-testing drop targets.
+ * Must match (or exceed) ConnectionHandles' HANDLE_HIT_RADIUS so releasing
+ * directly over a target node's connection handle — which sits on the
+ * border and extends slightly outside the rect — still counts as a hit.
+ * Also makes the drop zone a little more forgiving in general.
+ */
+const DROP_PADDING = 10
+
+/**
+ * Return the topmost non-group node whose bounds (expanded by DROP_PADDING)
+ * contain (x, y). Groups are never valid drop targets for edge creation.
  */
 function hitTestNodes(
   nodes: ResolvedNode[],
   x: number,
   y: number
 ): ResolvedNode | null {
+  const pad = DROP_PADDING
   // Iterate in reverse so later (visually on top) nodes win ties.
   for (let i = nodes.length - 1; i >= 0; i--) {
     const n = nodes[i]
     if (n.type === 'group') continue
-    if (x < n.x || x > n.x + n.width) continue
-    if (y < n.y || y > n.y + n.height) continue
+    if (x < n.x - pad || x > n.x + n.width + pad) continue
+    if (y < n.y - pad || y > n.y + n.height + pad) continue
     return n
   }
   return null
