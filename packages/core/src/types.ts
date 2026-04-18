@@ -47,6 +47,14 @@ export interface CanvasNode {
   background?: string
   /** type: 'group' — background rendering style */
   backgroundStyle?: BackgroundStyle
+
+  /**
+   * Free-form pass-through data for consumer-specific fields that the
+   * library does not need to understand (e.g. `status`, `owner`, `progress`,
+   * `dueDate`). Survives round-trips through the library's mutation helpers
+   * and is emitted back to the consumer via the update callbacks.
+   */
+  customData?: Record<string, any>
 }
 
 /** An edge connecting two nodes. */
@@ -214,6 +222,65 @@ export interface LanesTheme {
   headerPadding: number
 }
 
+/**
+ * A single action that a user can trigger on a selected node via the
+ * floating node toolbar. Each action carries its own visual treatment and
+ * the patch it applies — themes declare these so the library can render a
+ * generic toolbar without knowing the consumer's domain.
+ */
+export interface NodeAction {
+  /** Stable id, unique within its group. */
+  id: string
+  /** Human-readable label used as tooltip text. */
+  label: string
+  /**
+   * Optional icon key — looked up in the theme's `icons` map (or the built-in
+   * set). Renders inside a button-style action.
+   */
+  icon?: string
+  /**
+   * Optional swatch color — renders as a small colored dot/pill. Use for
+   * status/color palette groups.
+   */
+  swatch?: string
+  /**
+   * Patch to apply when the action is triggered. Can be a static patch or
+   * a function that receives the current node and returns one (for toggles,
+   * cycles, or "merge customData" behaviors).
+   */
+  patch: NodeUpdate | ((node: CanvasNode) => NodeUpdate)
+  /**
+   * Optional predicate — when present, the action is only rendered for
+   * nodes that match. Useful for category-specific actions.
+   */
+  appliesTo?: (node: CanvasNode) => boolean
+  /**
+   * Optional predicate — when present and true, the action is rendered as
+   * "active" (e.g. a highlighted swatch). Use this to reflect the node's
+   * current state in the toolbar.
+   */
+  isActive?: (node: CanvasNode) => boolean
+}
+
+/**
+ * A group of related NodeActions, rendered together in the toolbar.
+ * Groups are separated by a divider.
+ */
+export interface NodeActionGroup {
+  /** Stable id, unique within the theme. */
+  id: string
+  /** Optional heading shown above the group (or as a tooltip). */
+  label?: string
+  /**
+   * Visual treatment:
+   *   - `'swatches'` — a row of colored dots (good for color palettes and status)
+   *   - `'buttons'` — icon buttons in a row
+   *   - `'menu'` — a dropdown/popover with labels (good for longer lists like categories)
+   */
+  kind?: 'swatches' | 'buttons' | 'menu'
+  actions: NodeAction[]
+}
+
 export interface CanvasTheme {
   name: string
   background: string
@@ -234,6 +301,12 @@ export interface CanvasTheme {
    * domain-specific glyphs via the theme without forking the library.
    */
   icons?: Record<string, string[]>
+  /**
+   * Action groups shown in the floating node toolbar when a node is selected
+   * in editable mode. When omitted, the library falls back to a generic
+   * color-swatch group derived from `presetColors`.
+   */
+  nodeActions?: NodeActionGroup[]
 }
 
 // ---------------------------------------------------------------------------

@@ -147,6 +147,101 @@ export const roadmapTheme: CanvasTheme = {
     },
   },
 
+  // Node toolbar groups: status swatches (by far the most important thing
+  // to toggle on a roadmap node) and a category picker so users can convert
+  // between initiative/milestone/outcome/blocker/parked in-place.
+  nodeActions: [
+    {
+      id: 'status',
+      label: 'Status',
+      kind: 'swatches',
+      actions: [
+        {
+          id: 'status-planned',
+          label: 'Planned',
+          swatch: '#7dd3fc',
+          patch: (n) => ({
+            color: '5',
+            customData: { ...(n.customData ?? {}), status: 'planned' },
+          }),
+          isActive: (n) => n.customData?.status === 'planned',
+        },
+        {
+          id: 'status-in-progress',
+          label: 'In progress',
+          swatch: '#fcd34d',
+          patch: (n) => ({
+            color: '3',
+            customData: { ...(n.customData ?? {}), status: 'in-progress' },
+          }),
+          isActive: (n) => n.customData?.status === 'in-progress',
+        },
+        {
+          id: 'status-done',
+          label: 'Done',
+          swatch: '#4ade80',
+          patch: (n) => ({
+            color: '4',
+            customData: { ...(n.customData ?? {}), status: 'done' },
+          }),
+          isActive: (n) => n.customData?.status === 'done',
+        },
+        {
+          id: 'status-blocked',
+          label: 'Blocked',
+          swatch: '#f87171',
+          patch: (n) => ({
+            color: '1',
+            customData: { ...(n.customData ?? {}), status: 'blocked' },
+          }),
+          isActive: (n) => n.customData?.status === 'blocked',
+        },
+      ],
+    },
+    {
+      id: 'category',
+      label: 'Type',
+      kind: 'menu',
+      actions: [
+        {
+          id: 'cat-initiative',
+          label: 'Initiative',
+          icon: 'initiative',
+          patch: { category: 'initiative' },
+          isActive: (n) => n.category === 'initiative',
+        },
+        {
+          id: 'cat-milestone',
+          label: 'Milestone',
+          icon: 'milestone',
+          patch: { category: 'milestone' },
+          isActive: (n) => n.category === 'milestone',
+        },
+        {
+          id: 'cat-outcome',
+          label: 'Outcome',
+          icon: 'outcome',
+          patch: { category: 'outcome' },
+          isActive: (n) => n.category === 'outcome',
+        },
+        {
+          id: 'cat-blocker',
+          label: 'Blocker',
+          icon: 'blocker',
+          patch: { category: 'blocker' },
+          isActive: (n) => n.category === 'blocker',
+        },
+        {
+          id: 'cat-parked',
+          label: 'Parked',
+          icon: 'parked',
+          patch: { category: 'parked' },
+          isActive: (n) => n.category === 'parked',
+        },
+      ],
+    },
+  ],
+
   // Roadmap-specific glyphs authored in a 16x16 coordinate space, matching
   // the built-in icon system so they render at the same scale.
   icons: {

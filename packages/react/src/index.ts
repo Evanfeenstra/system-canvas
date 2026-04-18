@@ -19,6 +19,10 @@ export { ConnectionHandles } from './components/ConnectionHandles.js'
 export { PendingEdgeRenderer } from './components/PendingEdgeRenderer.js'
 export { AddNodeButton } from './components/AddNodeButton.js'
 export type { AddNodeButtonRenderProps } from './components/AddNodeButton.js'
+export { NodeToolbar } from './components/NodeToolbar.js'
+export type { NodeToolbarRenderProps } from './components/NodeToolbar.js'
+export { LanesBackground } from './components/LanesBackground.js'
+export { LaneHeaders } from './components/LaneHeaders.js'
 export { ResizeHandles } from './components/ResizeHandles.js'
 
 // Hooks

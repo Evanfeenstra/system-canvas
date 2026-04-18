@@ -30,6 +30,8 @@ export type {
   NodeUpdate,
   EdgeUpdate,
   NodeMenuOption,
+  NodeAction,
+  NodeActionGroup,
 } from './types.js'
 
 // Themes
@@ -62,6 +64,14 @@ export type { Rect } from './rendering/index.js'
 
 // Lane helpers
 export { findLaneAt, snapToLane, evenLanes, lanesExtent } from './lanes.js'
+
+// Action helpers
+export {
+  resolveActionPatch,
+  buildDefaultColorActions,
+  getNodeActions,
+  filterActionsForNode,
+} from './actions.js'
 
 // Canvas helpers
 export {

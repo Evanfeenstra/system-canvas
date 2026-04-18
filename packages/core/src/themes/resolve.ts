@@ -24,6 +24,10 @@ export function resolveTheme(
     lanes: { ...base.lanes, ...partial.lanes },
     presetColors: { ...base.presetColors, ...partial.presetColors },
     categories: { ...base.categories, ...partial.categories },
+    icons: partial.icons
+      ? { ...(base.icons ?? {}), ...partial.icons }
+      : base.icons,
+    nodeActions: partial.nodeActions ?? base.nodeActions,
   }
 }
 

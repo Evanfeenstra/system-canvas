@@ -37,6 +37,7 @@ import { Viewport, type ViewportHandle } from './Viewport.js'
 import { Breadcrumbs } from './Breadcrumbs.js'
 import { AddNodeButton, type AddNodeButtonRenderProps } from './AddNodeButton.js'
 import { LaneHeaders } from './LaneHeaders.js'
+import { NodeToolbar, type NodeToolbarRenderProps } from './NodeToolbar.js'
 
 export interface SystemCanvasProps {
   /** Canvas data to render */
@@ -86,6 +87,20 @@ export interface SystemCanvasProps {
   onEdgeAdd?: (edge: CanvasEdge, canvasRef: string | undefined) => void
   /** Fully replace the default add-node FAB. */
   renderAddNodeButton?: (props: AddNodeButtonRenderProps) => React.ReactNode
+
+  /**
+   * Controls the floating toolbar that appears above a selected node in
+   * editable mode. Defaults to `true`. Pass `false` to suppress it entirely
+   * (consumers can still build their own UI via `onContextMenu`).
+   */
+  showNodeToolbar?: boolean
+
+  /**
+   * Fully replace the default node toolbar contents. The library still
+   * positions the toolbar container above the node; the render prop supplies
+   * its inner React nodes. Receives `{ node, theme, patch, deleteNode }`.
+   */
+  renderNodeToolbar?: (props: NodeToolbarRenderProps) => React.ReactNode
 
   // --- Theming ---
   theme?: CanvasTheme | Partial<CanvasTheme>
@@ -171,6 +186,8 @@ export function SystemCanvas({
   onEdgeDelete,
   onEdgeAdd,
   renderAddNodeButton,
+  showNodeToolbar = true,
+  renderNodeToolbar,
   theme: themeProp,
   edgeStyle = 'bezier',
   defaultViewport,
@@ -389,6 +406,23 @@ export function SystemCanvas({
       viewport: viewportStateRef,
       onCommit: commitDrag,
     })
+
+  // Selected node with live drag/resize overrides applied — used to position
+  // the floating node toolbar so it tracks the node as the user drags it.
+  const selectedResolvedNode = useMemo<ResolvedNode | null>(() => {
+    if (!selectedId) return null
+    const base = nodeMap.get(selectedId)
+    if (!base) return null
+    const resize = resizeOverrides.get(selectedId)
+    if (resize) {
+      return { ...base, x: resize.x, y: resize.y, width: resize.width, height: resize.height }
+    }
+    const drag = dragOverrides.get(selectedId)
+    if (drag) {
+      return { ...base, x: drag.x, y: drag.y }
+    }
+    return base
+  }, [selectedId, nodeMap, dragOverrides, resizeOverrides])
 
   // Proxy ref pointing at the SVG element exposed by the viewport handle.
   // Updated on every render so useEdgeCreate can convert client coords.
@@ -766,6 +800,25 @@ export function SystemCanvas({
           width={containerSize.width}
           height={containerSize.height}
           pinned={laneHeaders === 'pinned'}
+        />
+      )}
+
+      {/* Floating node toolbar (above the selected node, editable mode only) */}
+      {editable && showNodeToolbar && selectedResolvedNode && !editingId && (
+        <NodeToolbar
+          node={selectedResolvedNode}
+          theme={theme}
+          onPatch={(update) => {
+            onNodeUpdate?.(selectedResolvedNode.id, update, currentCanvasRef)
+          }}
+          onDelete={() => {
+            onNodeDelete?.(selectedResolvedNode.id, currentCanvasRef)
+            setSelectedId(null)
+          }}
+          getViewport={getViewportState}
+          containerWidth={containerSize.width}
+          containerHeight={containerSize.height}
+          render={renderNodeToolbar}
         />
       )}
 

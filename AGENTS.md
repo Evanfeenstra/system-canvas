@@ -23,6 +23,7 @@ Pure TypeScript. No React, no DOM, no dependencies. Any framework adapter import
 
 - `src/types.ts` — All TypeScript interfaces. This is the source of truth for the data model.
 - `src/canvas.ts` — Canvas data helpers: resolve nodes, build lookup maps, validate, get labels, find group children, and editing helpers (`addNode`, `updateNode`, `removeNode`, `addEdge`, `updateEdge`, `removeEdge`, `generateNodeId`, `generateEdgeId`, `getNodeMenuOptions`, `createNodeFromOption`).
+- `src/actions.ts` — Pure helpers for the node-toolbar action system: `getNodeActions(theme)` (returns theme's `nodeActions` or a generated default color-swatch group from `presetColors`), `buildDefaultColorActions(theme)`, `filterActionsForNode(group, node)`, `resolveActionPatch(action, node)`.
 - `src/themes/` — Six pre-made themes (dark, midnight, light, blueprint, warm, roadmap) plus the resolver that merges partial themes and resolves colors/categories.
 - `src/rendering/` — Pure math: anchor point computation, edge path routing (bezier/straight/orthogonal), viewport transforms, bounding box calculation.
 - `src/lanes.ts` — Pure helpers for the lane primitive (columns/rows): `findLaneAt`, `snapToLane`, `evenLanes`, `lanesExtent`. Zero opinion about what lanes represent (dates, ordinal buckets, teams, phases — it's all the same to the library).
@@ -42,6 +43,7 @@ React bindings. Depends on `system-canvas` for all types and math.
 - `src/components/NodeEditor.tsx` — Inline editor rendered via `<foreignObject>` for text/file/link/group fields.
 - `src/components/EdgeLabelEditor.tsx` — Inline edge label editor rendered via `<foreignObject>` centered on the edge midpoint.
 - `src/components/AddNodeButton.tsx` — Default floating "+" FAB and add-node popover menu.
+- `src/components/NodeToolbar.tsx` — Floating toolbar rendered as an HTML overlay above the selected node in editable mode. Tracks the viewport via `requestAnimationFrame` for fixed-pixel sizing at any zoom; flips below the node when near the viewport top. Reads `theme.nodeActions` (or a generated color-swatch default) and renders three group kinds: `swatches` (colored dots), `buttons` (icon buttons), `menu` (dropdown/popover). Always appends a trailing delete button. Fully replaceable via the `renderNodeToolbar` render prop, which receives `{ node, theme, patch, deleteNode }` — in that case the library still positions the container and the consumer draws its contents.
 - `src/components/Breadcrumbs.tsx` — Navigation breadcrumb trail overlay.
 - `src/components/LanesBackground.tsx` — Renders column/row bands in canvas-space. Sits inside the transformable `<g>` behind all nodes/edges. Draws alternating fills, optional per-lane color overrides, and dividers between adjacent lanes.
 - `src/components/LaneHeaders.tsx` — Screen-space overlay that renders pinned column labels (top strip) and row labels (left strip). Polls the viewport via `requestAnimationFrame` to keep in sync with d3-zoom transforms. Supports `pinned` (sticky to viewport edges) and non-pinned (scrolls with content) modes.
