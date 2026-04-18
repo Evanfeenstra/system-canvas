@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react'
+import React, { useCallback, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { SystemCanvas } from 'system-canvas-react'
 import {
@@ -56,7 +56,18 @@ function App() {
   }))
 
   const allCanvases = mode === 'system' ? systemCanvases : roadmapCanvases
-  const setAllCanvases = mode === 'system' ? setSystemCanvases : setRoadmapCanvases
+  // IMPORTANT: the setter must be chosen on every call, not captured at
+  // closure creation — otherwise switching modes would silently keep
+  // mutating whichever canvas was active on the first render.
+  const modeRef = useRef(mode)
+  modeRef.current = mode
+  const setActiveCanvases = useCallback(
+    (updater: (prev: Record<string, CanvasData>) => Record<string, CanvasData>) => {
+      if (modeRef.current === 'system') setSystemCanvases(updater)
+      else setRoadmapCanvases(updater)
+    },
+    []
+  )
 
   // When switching modes, flip to the most-appropriate theme automatically
   // — but preserve the user's choice within each mode.
@@ -76,62 +87,65 @@ function App() {
 
   const handleNodeAdd = useCallback((node: CanvasNode, canvasRef: string | undefined) => {
     const key = keyFor(canvasRef)
-    setAllCanvases((prev) => ({
+    setActiveCanvases((prev) => ({
       ...prev,
       [key]: addNodeHelper(prev[key] ?? { nodes: [], edges: [] }, node),
     }))
-  }, [])
+  }, [setActiveCanvases])
 
   const handleNodeUpdate = useCallback(
     (nodeId: string, patch: NodeUpdate, canvasRef: string | undefined) => {
       const key = keyFor(canvasRef)
-      setAllCanvases((prev) => ({
+      setActiveCanvases((prev) => ({
         ...prev,
         [key]: updateNodeHelper(prev[key] ?? { nodes: [], edges: [] }, nodeId, patch),
       }))
     },
-    []
+    [setActiveCanvases]
   )
 
-  const handleNodeDelete = useCallback((nodeId: string, canvasRef: string | undefined) => {
-    const key = keyFor(canvasRef)
-    setAllCanvases((prev) => ({
-      ...prev,
-      [key]: removeNodeHelper(prev[key] ?? { nodes: [], edges: [] }, nodeId),
-    }))
-  }, [])
+  const handleNodeDelete = useCallback(
+    (nodeId: string, canvasRef: string | undefined) => {
+      const key = keyFor(canvasRef)
+      setActiveCanvases((prev) => ({
+        ...prev,
+        [key]: removeNodeHelper(prev[key] ?? { nodes: [], edges: [] }, nodeId),
+      }))
+    },
+    [setActiveCanvases]
+  )
 
   const handleEdgeUpdate = useCallback(
     (edgeId: string, patch: EdgeUpdate, canvasRef: string | undefined) => {
       const key = keyFor(canvasRef)
-      setAllCanvases((prev) => ({
+      setActiveCanvases((prev) => ({
         ...prev,
         [key]: updateEdgeHelper(prev[key] ?? { nodes: [], edges: [] }, edgeId, patch),
       }))
     },
-    []
+    [setActiveCanvases]
   )
 
   const handleEdgeDelete = useCallback(
     (edgeId: string, canvasRef: string | undefined) => {
       const key = keyFor(canvasRef)
-      setAllCanvases((prev) => ({
+      setActiveCanvases((prev) => ({
         ...prev,
         [key]: removeEdgeHelper(prev[key] ?? { nodes: [], edges: [] }, edgeId),
       }))
     },
-    []
+    [setActiveCanvases]
   )
 
   const handleEdgeAdd = useCallback(
     (edge: CanvasEdge, canvasRef: string | undefined) => {
       const key = keyFor(canvasRef)
-      setAllCanvases((prev) => ({
+      setActiveCanvases((prev) => ({
         ...prev,
         [key]: addEdgeHelper(prev[key] ?? { nodes: [], edges: [] }, edge),
       }))
     },
-    []
+    [setActiveCanvases]
   )
 
   return (
