@@ -117,7 +117,15 @@ export interface GridConfig {
 
 export interface RefIndicatorConfig {
   icon: 'chevron' | 'arrow' | 'expand' | 'none'
+  /** Resting glyph color */
   color: string
+  /**
+   * Hover fill of the carved square. Defaults to `node.labelColor` at 18%.
+   * Any valid CSS color (rgba/hex/named).
+   */
+  hoverFill?: string
+  /** Hover glyph color. Defaults to `theme.background` (inverted on the fill). */
+  hoverColor?: string
 }
 
 export interface NodeTheme {

@@ -27,7 +27,7 @@ export const darkTheme: CanvasTheme = {
     sublabelFontSize: 9,
     refIndicator: {
       icon: 'chevron',
-      color: 'rgba(148, 163, 184, 0.6)', // slate-400 at 60%
+      color: 'rgba(203, 213, 225, 0.95)', // slate-300 at 95%
     },
   },
 

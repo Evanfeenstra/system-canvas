@@ -27,7 +27,7 @@ export const midnightTheme: CanvasTheme = {
     sublabelFontSize: 8,
     refIndicator: {
       icon: 'arrow',
-      color: 'rgba(107, 114, 128, 0.5)',
+      color: 'rgba(203, 213, 225, 0.95)',
     },
   },
 

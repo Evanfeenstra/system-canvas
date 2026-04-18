@@ -54,55 +54,78 @@ export function RefIndicator({
   // Compute the carved square bounds.
   const right = nodeX + nodeWidth
   const bottom = nodeY + nodeHeight
+
+  // Round the inner corner (the one facing into the node body) so the carve
+  // visually echoes the box's rounding, but keep the arc noticeably tighter
+  // than the node's own radius so the carve still reads as a distinct corner
+  // rather than a soft scoop. Clamp to half the carve size so it always fits.
+  const nodeRadius =
+    corner === 'top-right' ? theme.group.cornerRadius : node.resolvedCornerRadius
+  const innerR = Math.max(0, Math.min(nodeRadius * 0.64, size / 2))
+
   let squareX: number
   let squareY: number
-  let innerTopLine: { x1: number; y1: number; x2: number; y2: number }
-  let innerSideLine: { x1: number; y1: number; x2: number; y2: number }
+  // Path tracing the carve from one outer edge to the other, with a rounded
+  // concave arc at the inner corner. The arc sweeps away from the outer
+  // corner so the inside of the carve matches the node's own rounding.
+  let carvePath: string
 
   if (corner === 'bottom-right') {
     squareX = right - size
     squareY = bottom - size
-    // Top edge of the square — extends all the way to the node's right edge.
-    innerTopLine = {
-      x1: squareX,
-      y1: squareY,
-      x2: right,
-      y2: squareY,
-    }
-    // Left edge of the square — extends all the way to the node's bottom edge.
-    innerSideLine = {
-      x1: squareX,
-      y1: squareY,
-      x2: squareX,
-      y2: bottom,
-    }
+    // Start at the top of the carve on the node's right edge, walk left
+    // along the top of the square to the arc, curve down, then walk down
+    // to the node's bottom edge.
+    carvePath =
+      `M ${right} ${squareY} ` +
+      `L ${squareX + innerR} ${squareY} ` +
+      `A ${innerR} ${innerR} 0 0 0 ${squareX} ${squareY + innerR} ` +
+      `L ${squareX} ${bottom}`
   } else {
     // top-right
     squareX = right - size
     squareY = nodeY
-    // Bottom edge of the square — extends to the node's right edge.
-    innerTopLine = {
-      x1: squareX,
-      y1: squareY + size,
-      x2: right,
-      y2: squareY + size,
-    }
-    // Left edge of the square — extends up to the node's top edge.
-    innerSideLine = {
-      x1: squareX,
-      y1: nodeY,
-      x2: squareX,
-      y2: squareY + size,
-    }
+    // Start at the left of the carve on the node's top edge, walk down
+    // to the arc, curve right, then walk right to the node's right edge.
+    carvePath =
+      `M ${squareX} ${nodeY} ` +
+      `L ${squareX} ${squareY + size - innerR} ` +
+      `A ${innerR} ${innerR} 0 0 0 ${squareX + innerR} ${squareY + size} ` +
+      `L ${right} ${squareY + size}`
   }
 
   const cx = squareX + size / 2
   const cy = squareY + size / 2
 
   const sw = strokeWidth ?? theme.node.strokeWidth
-  const hoverFill = theme.node.labelColor
-  const hoverGlyph = theme.background
   const restGlyph = theme.node.refIndicator.color
+  // On hover the carved square fills with the node's own stroke color (the
+  // category/accent) and the glyph flips to the canvas background so it
+  // reads as a cutout — a green node's button turns solid green, a red
+  // node's red.
+  const hoverFill = strokeColor
+  const hoverGlyph = theme.background
+
+  // Hover fill needs to respect the rounded inner corner. We build a closed
+  // path from the square's outer corner around to the inner arc.
+  let hoverPath: string
+  if (corner === 'bottom-right') {
+    hoverPath =
+      `M ${right} ${squareY} ` +
+      `L ${right} ${bottom} ` +
+      `L ${squareX} ${bottom} ` +
+      `L ${squareX} ${squareY + innerR} ` +
+      `A ${innerR} ${innerR} 0 0 1 ${squareX + innerR} ${squareY} ` +
+      `Z`
+  } else {
+    hoverPath =
+      `M ${squareX} ${nodeY} ` +
+      `L ${right} ${nodeY} ` +
+      `L ${right} ${squareY + size} ` +
+      `L ${squareX + innerR} ${squareY + size} ` +
+      `A ${innerR} ${innerR} 0 0 1 ${squareX} ${squareY + size - innerR} ` +
+      `Z`
+  }
 
   return (
     <g
@@ -118,36 +141,23 @@ export function RefIndicator({
       onPointerEnter={() => setHover(true)}
       onPointerLeave={() => setHover(false)}
     >
-      {/* Hover fill — inside the carved square */}
+      {/* Hover fill — inside the carved square, respecting the inner arc */}
       {hover && (
-        <rect
-          x={squareX}
-          y={squareY}
-          width={size}
-          height={size}
+        <path
+          d={hoverPath}
           fill={hoverFill}
-          opacity={0.18}
           pointerEvents="none"
         />
       )}
 
-      {/* The two inner lines that carve the corner, matching the node stroke */}
-      <line
-        x1={innerTopLine.x1}
-        y1={innerTopLine.y1}
-        x2={innerTopLine.x2}
-        y2={innerTopLine.y2}
+      {/* The carved corner stroke — two edges joined by a rounded inner arc */}
+      <path
+        d={carvePath}
+        fill="none"
         stroke={strokeColor}
         strokeWidth={sw}
-        pointerEvents="none"
-      />
-      <line
-        x1={innerSideLine.x1}
-        y1={innerSideLine.y1}
-        x2={innerSideLine.x2}
-        y2={innerSideLine.y2}
-        stroke={strokeColor}
-        strokeWidth={sw}
+        strokeLinecap="butt"
+        strokeLinejoin="round"
         pointerEvents="none"
       />
 
@@ -176,7 +186,9 @@ function Glyph({
   cy: number
   color: string
 }) {
-  const s = 4 // inner icon half-size
+  // Inner icon half-size. Slightly smaller than before so the glyph sits
+  // comfortably inside the 18px carved square with breathing room.
+  const s = 3
   switch (kind) {
     case 'chevron':
       return (
@@ -184,24 +196,26 @@ function Glyph({
           d={`M ${cx - s / 2} ${cy - s} L ${cx + s / 2} ${cy} L ${cx - s / 2} ${cy + s}`}
           fill="none"
           stroke={color}
-          strokeWidth={1.5}
+          strokeWidth={2}
           strokeLinecap="round"
           strokeLinejoin="round"
           pointerEvents="none"
         />
       )
-    case 'arrow':
+    case 'arrow': {
+      const h = s * 0.9 // head size
       return (
         <path
-          d={`M ${cx - s} ${cy} L ${cx + s} ${cy} M ${cx + s / 2} ${cy - s / 2} L ${cx + s} ${cy} L ${cx + s / 2} ${cy + s / 2}`}
+          d={`M ${cx - s} ${cy} L ${cx + s} ${cy} M ${cx + s - h} ${cy - h} L ${cx + s} ${cy} L ${cx + s - h} ${cy + h}`}
           fill="none"
           stroke={color}
-          strokeWidth={1.5}
+          strokeWidth={2}
           strokeLinecap="round"
           strokeLinejoin="round"
           pointerEvents="none"
         />
       )
+    }
     case 'expand':
       return (
         <g pointerEvents="none">
@@ -209,10 +223,11 @@ function Glyph({
             d={`M ${cx - s} ${cy - s} L ${cx + s} ${cy - s} L ${cx + s} ${cy + s} L ${cx - s} ${cy + s} Z`}
             fill="none"
             stroke={color}
-            strokeWidth={1}
+            strokeWidth={1.5}
+            strokeLinejoin="round"
           />
-          <line x1={cx} y1={cy - s + 1} x2={cx} y2={cy + s - 1} stroke={color} strokeWidth={1} />
-          <line x1={cx - s + 1} y1={cy} x2={cx + s - 1} y2={cy} stroke={color} strokeWidth={1} />
+          <line x1={cx} y1={cy - s + 1} x2={cx} y2={cy + s - 1} stroke={color} strokeWidth={1.5} strokeLinecap="round" />
+          <line x1={cx - s + 1} y1={cy} x2={cx + s - 1} y2={cy} stroke={color} strokeWidth={1.5} strokeLinecap="round" />
         </g>
       )
   }

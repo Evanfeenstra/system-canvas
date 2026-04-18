@@ -27,7 +27,7 @@ export const blueprintTheme: CanvasTheme = {
     sublabelFontSize: 8,
     refIndicator: {
       icon: 'expand',
-      color: 'rgba(74, 144, 217, 0.5)',
+      color: 'rgba(191, 219, 254, 0.95)',
     },
   },
 

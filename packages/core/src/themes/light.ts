@@ -27,7 +27,7 @@ export const lightTheme: CanvasTheme = {
     sublabelFontSize: 9,
     refIndicator: {
       icon: 'chevron',
-      color: 'rgba(100, 116, 139, 0.5)',
+      color: 'rgba(71, 85, 105, 0.9)',
     },
   },
 

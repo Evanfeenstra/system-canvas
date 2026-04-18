@@ -27,7 +27,7 @@ export const warmTheme: CanvasTheme = {
     sublabelFontSize: 9,
     refIndicator: {
       icon: 'chevron',
-      color: 'rgba(139, 126, 106, 0.5)',
+      color: 'rgba(87, 77, 62, 0.9)',
     },
   },
 
