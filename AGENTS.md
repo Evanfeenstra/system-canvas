@@ -75,8 +75,8 @@ The library supports an optional generic **lanes** primitive — named horizonta
 - Each `CanvasLane` is `{ id, label, start, size, color? }`. The consumer computes `start`/`size` however they like (even widths via `evenLanes(labels)`, date math, custom bucketing — whatever).
 - Bands render inside the transformable `<g>` so they pan and zoom with content; dividers are drawn with `vectorEffect="non-scaling-stroke"` so they stay crisp at any zoom.
 - Headers (pinned column labels on top, row labels on left) render as a screen-space SVG overlay above the viewport. Controlled by the `laneHeaders` prop: `'pinned'` (default), `'scroll'`, or `'none'`.
-- Setting the `snapToLanes` prop on `SystemCanvas` causes drags to snap a node's `x` to the nearest column's start and/or `y` to the nearest row's start on commit. Gated per-axis on whether `columns`/`rows` are defined.
-- Core ships pure helpers in `packages/core/src/lanes.ts`: `findLaneAt(pos, lanes)`, `snapToLane(pos, lanes, { edge: 'start' | 'nearest', size? })`, `evenLanes(labels, size?, start?)`, `lanesExtent(lanes)`.
+- Setting the `snapToLanes` prop on `SystemCanvas` causes drags to snap a node so it's centered within its column and/or row on commit (the node's resolved width/height is passed to `snapToLane` with `edge: 'center'`). Gated per-axis on whether `columns`/`rows` are defined.
+- Core ships pure helpers in `packages/core/src/lanes.ts`: `findLaneAt(pos, lanes)`, `snapToLane(pos, lanes, { edge: 'start' | 'center' | 'nearest', size? })`, `evenLanes(labels, size?, start?)`, `lanesExtent(lanes)`.
 - The built-in `roadmap` theme (in `packages/core/src/themes/roadmap.ts`) pairs well with lanes — it ships categories for `initiative`, `milestone`, `outcome`, `blocker`, `parked`, plus a `lane` group category, and includes bespoke 16x16 icons (initiative, milestone, outcome, blocker, parked) shipped via the theme's `icons` map.
 
 ## Key concepts

@@ -504,20 +504,32 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
   )
 
   // Drag. If snapToLanes is on and the canvas has lanes, snap the committed
-  // x (to column start) and/or y (to row start) before forwarding the patch.
+  // x and/or y so the node is centered within its column/row. The node's
+  // resolved width/height (from `nodesRef`) is fed to `snapToLane` so the
+  // snap accounts for node size — otherwise the node's top-left would
+  // align to the lane's start edge, visually jumping to the lane's corner.
   const commitDrag = useCallback(
     (id: string, patch: NodeUpdate) => {
       let final = patch
       if (snapToLanes) {
         const cols = currentCanvas.columns
         const rows = currentCanvas.rows
+        const node = nodesRef.current.find((n) => n.id === id)
         const nx = patch.x
         const ny = patch.y
         if (cols && cols.length > 0 && nx != null) {
-          final = { ...final, x: Math.round(snapToLane(nx, cols)) }
+          const snapped = snapToLane(nx, cols, {
+            edge: 'center',
+            size: node?.width ?? 0,
+          })
+          final = { ...final, x: Math.round(snapped) }
         }
         if (rows && rows.length > 0 && ny != null) {
-          final = { ...final, y: Math.round(snapToLane(ny, rows)) }
+          const snapped = snapToLane(ny, rows, {
+            edge: 'center',
+            size: node?.height ?? 0,
+          })
+          final = { ...final, y: Math.round(snapped) }
         }
       }
       onNodeUpdate?.(id, final, currentCanvasRef)

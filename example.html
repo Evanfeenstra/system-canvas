@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Distributed AI Platform — System Map</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #050814; }
+      #app { width: 100vw; height: 100vh; }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script src="https://unpkg.com/system-canvas-standalone@latest/dist/system-canvas.min.js"></script>
+    <script>
+      const categories = {
+        edge:      { defaultWidth: 170, defaultHeight: 70, fill: 'rgba(30,41,59,0.45)',   stroke: '#94a3b8' },
+        gateway:   { defaultWidth: 170, defaultHeight: 70, fill: 'rgba(14,116,144,0.45)', stroke: '#22d3ee' },
+        service:   { defaultWidth: 170, defaultHeight: 70, fill: 'rgba(6,78,59,0.45)',    stroke: '#34d399' },
+        worker:    { defaultWidth: 160, defaultHeight: 65, fill: 'rgba(76,29,149,0.45)',  stroke: '#a78bfa' },
+        queue:     { defaultWidth: 150, defaultHeight: 60, fill: 'rgba(120,53,15,0.45)',  stroke: '#fbbf24' },
+        database:  { defaultWidth: 160, defaultHeight: 70, fill: 'rgba(131,24,67,0.45)',  stroke: '#f472b6' },
+        cache:     { defaultWidth: 140, defaultHeight: 60, fill: 'rgba(127,29,29,0.45)',  stroke: '#fb7185' },
+        ml:        { defaultWidth: 170, defaultHeight: 70, fill: 'rgba(67,20,7,0.5)',     stroke: '#fb923c' },
+        observer:  { defaultWidth: 150, defaultHeight: 60, fill: 'rgba(30,58,138,0.45)',  stroke: '#60a5fa' },
+        component: { defaultWidth: 150, defaultHeight: 60, fill: 'rgba(30,64,175,0.4)',   stroke: '#60a5fa' },
+      };
+
+      const canvas = {
+        editable: true,
+        theme: { base: 'midnight', categories },
+        nodes: [
+          { id: 'users',    type: 'text', text: 'End Users\nWeb + Mobile',     x: -720, y: -40, category: 'edge' },
+          { id: 'cdn',      type: 'text', text: 'CDN\nCloudflare',             x: -480, y: -40, category: 'edge' },
+
+          { id: 'gateway',  type: 'text', text: 'API Gateway',                 x: -240, y: -40, category: 'gateway', ref: 'gateway-internals' },
+
+          { id: 'auth',     type: 'text', text: 'Auth Service',                x: 0,    y: -180, category: 'service' },
+          { id: 'api',      type: 'text', text: 'Core API',                    x: 0,    y: -40,  category: 'service', ref: 'api-internals' },
+          { id: 'agents',   type: 'text', text: 'Agent Orchestrator',          x: 0,    y: 100,  category: 'service', ref: 'agent-internals' },
+
+          { id: 'kafka',    type: 'text', text: 'Kafka\nEvent Bus',            x: 240,  y: 100,  category: 'queue' },
+          { id: 'redis',    type: 'text', text: 'Redis',                       x: 240,  y: -180, category: 'cache' },
+          { id: 'pg',       type: 'text', text: 'Postgres\nPrimary',           x: 240,  y: -40,  category: 'database' },
+
+          { id: 'workers',  type: 'text', text: 'Task Workers',                x: 480,  y: 100,  category: 'worker', ref: 'worker-internals' },
+          { id: 'inference',type: 'text', text: 'LLM Inference',               x: 480,  y: 240,  category: 'ml', ref: 'ml-internals' },
+
+          { id: 'warehouse',type: 'text', text: 'Warehouse\nBigQuery',         x: 720,  y: 100,  category: 'database' },
+          { id: 'otel',     type: 'text', text: 'OpenTelemetry',               x: 720,  y: -40,  category: 'observer' },
+          { id: 'grafana',  type: 'text', text: 'Grafana +\nPrometheus',       x: 720,  y: -180, category: 'observer' },
+        ],
+        edges: [
+          { id: 'e1',  fromNode: 'users',     toNode: 'cdn',      label: 'HTTPS' },
+          { id: 'e2',  fromNode: 'cdn',       toNode: 'gateway',  label: 'origin' },
+          { id: 'e3',  fromNode: 'gateway',   toNode: 'auth',     label: 'verify' },
+          { id: 'e4',  fromNode: 'gateway',   toNode: 'api' },
+          { id: 'e5',  fromNode: 'gateway',   toNode: 'agents',   label: 'stream' },
+          { id: 'e6',  fromNode: 'auth',      toNode: 'redis',    label: 'sessions' },
+          { id: 'e7',  fromNode: 'api',       toNode: 'pg',       label: 'SQL' },
+          { id: 'e8',  fromNode: 'api',       toNode: 'redis',    label: 'cache' },
+          { id: 'e9',  fromNode: 'api',       toNode: 'kafka',    label: 'publish' },
+          { id: 'e10', fromNode: 'agents',    toNode: 'kafka',    label: 'enqueue' },
+          { id: 'e11', fromNode: 'kafka',     toNode: 'workers',  label: 'consume' },
+          { id: 'e12', fromNode: 'workers',   toNode: 'inference',label: 'invoke' },
+          { id: 'e13', fromNode: 'workers',   toNode: 'pg',       label: 'persist' },
+          { id: 'e14', fromNode: 'workers',   toNode: 'warehouse',label: 'ETL' },
+          { id: 'e15', fromNode: 'api',       toNode: 'otel',     label: 'traces' },
+          { id: 'e16', fromNode: 'agents',    toNode: 'otel' },
+          { id: 'e17', fromNode: 'workers',   toNode: 'otel' },
+          { id: 'e18', fromNode: 'otel',      toNode: 'grafana',  label: 'metrics' },
+        ],
+      };
+
+      const canvases = {
+        'gateway-internals': {
+          theme: { base: 'midnight', categories },
+          nodes: [
+            { id: 'tls',     type: 'text', text: 'TLS Termination',   x: 0,   y: 0,   category: 'component' },
+            { id: 'ratelim', type: 'text', text: 'Rate Limiter',      x: 200, y: 0,   category: 'component' },
+            { id: 'router',  type: 'text', text: 'Router',            x: 400, y: 0,   category: 'component' },
+            { id: 'waf',     type: 'text', text: 'WAF Rules',         x: 200, y: -120,category: 'component' },
+            { id: 'cors',    type: 'text', text: 'CORS + Headers',    x: 400, y: -120,category: 'component' },
+          ],
+          edges: [
+            { id: 'g1', fromNode: 'tls',     toNode: 'waf' },
+            { id: 'g2', fromNode: 'waf',     toNode: 'ratelim' },
+            { id: 'g3', fromNode: 'ratelim', toNode: 'router' },
+            { id: 'g4', fromNode: 'cors',    toNode: 'router' },
+          ],
+        },
+
+        'api-internals': {
+          theme: { base: 'midnight', categories },
+          nodes: [
+            { id: 'grp',     type: 'group', label: 'HTTP Layer',      x: -40,  y: -60, width: 560, height: 200 },
+            { id: 'mw',      type: 'text',  text: 'Middleware',       x: 0,    y: 0,   category: 'component' },
+            { id: 'handler', type: 'text',  text: 'Handlers',         x: 200,  y: 0,   category: 'component' },
+            { id: 'validate',type: 'text',  text: 'Validators',       x: 360,  y: 0,   category: 'component' },
+
+            { id: 'domain',  type: 'text',  text: 'Domain Services',  x: 200,  y: 180, category: 'component' },
+            { id: 'repo',    type: 'text',  text: 'Repositories',     x: 200,  y: 320, category: 'component' },
+            { id: 'cachecl', type: 'text',  text: 'Cache Client',     x: 0,    y: 320, category: 'component' },
+            { id: 'pub',     type: 'text',  text: 'Event Publisher',  x: 400,  y: 320, category: 'component' },
+          ],
+          edges: [
+            { id: 'a1', fromNode: 'mw',       toNode: 'handler' },
+            { id: 'a2', fromNode: 'handler',  toNode: 'validate' },
+            { id: 'a3', fromNode: 'handler',  toNode: 'domain' },
+            { id: 'a4', fromNode: 'domain',   toNode: 'repo' },
+            { id: 'a5', fromNode: 'domain',   toNode: 'cachecl' },
+            { id: 'a6', fromNode: 'domain',   toNode: 'pub' },
+          ],
+        },
+
+        'agent-internals': {
+          theme: { base: 'midnight', categories },
+          nodes: [
+            { id: 'planner',  type: 'text', text: 'Planner',          x: 0,    y: 0,   category: 'component' },
+            { id: 'tools',    type: 'text', text: 'Tool Registry',    x: 220,  y: -120,category: 'component' },
+            { id: 'memory',   type: 'text', text: 'Memory Store',     x: 220,  y: 120, category: 'component' },
+            { id: 'exec',     type: 'text', text: 'Executor',         x: 440,  y: 0,   category: 'component' },
+            { id: 'guard',    type: 'text', text: 'Safety Guard',     x: 660,  y: 0,   category: 'component' },
+            { id: 'stream',   type: 'text', text: 'SSE Streamer',     x: 880,  y: 0,   category: 'component' },
+          ],
+          edges: [
+            { id: 'ag1', fromNode: 'planner', toNode: 'tools' },
+            { id: 'ag2', fromNode: 'planner', toNode: 'memory' },
+            { id: 'ag3', fromNode: 'planner', toNode: 'exec' },
+            { id: 'ag4', fromNode: 'exec',    toNode: 'guard' },
+            { id: 'ag5', fromNode: 'guard',   toNode: 'stream' },
+          ],
+        },
+
+        'worker-internals': {
+          theme: { base: 'midnight', categories },
+          nodes: [
+            { id: 'consumer', type: 'text', text: 'Kafka Consumer',   x: 0,    y: 0,   category: 'component' },
+            { id: 'dispatch', type: 'text', text: 'Job Dispatcher',   x: 220,  y: 0,   category: 'component' },
+            { id: 'retry',    type: 'text', text: 'Retry Policy',     x: 220,  y: -140,category: 'component' },
+            { id: 'dlq',      type: 'text', text: 'Dead Letter Q',    x: 220,  y: 140, category: 'queue' },
+            { id: 'embed',    type: 'text', text: 'Embed Job',        x: 440,  y: -80, category: 'component' },
+            { id: 'gen',      type: 'text', text: 'Generation Job',   x: 440,  y: 40,  category: 'component' },
+            { id: 'etl',      type: 'text', text: 'ETL Job',          x: 440,  y: 160, category: 'component' },
+          ],
+          edges: [
+            { id: 'w1', fromNode: 'consumer', toNode: 'dispatch' },
+            { id: 'w2', fromNode: 'dispatch', toNode: 'retry' },
+            { id: 'w3', fromNode: 'retry',    toNode: 'dlq' },
+            { id: 'w4', fromNode: 'dispatch', toNode: 'embed' },
+            { id: 'w5', fromNode: 'dispatch', toNode: 'gen' },
+            { id: 'w6', fromNode: 'dispatch', toNode: 'etl' },
+          ],
+        },
+
+        'ml-internals': {
+          theme: { base: 'midnight', categories },
+          nodes: [
+            { id: 'lb',       type: 'text', text: 'Load Balancer',    x: 0,    y: 0,   category: 'component' },
+            { id: 'gpu1',     type: 'text', text: 'GPU Pod A\nvLLM',  x: 220,  y: -120,category: 'ml' },
+            { id: 'gpu2',     type: 'text', text: 'GPU Pod B\nvLLM',  x: 220,  y: 0,   category: 'ml' },
+            { id: 'gpu3',     type: 'text', text: 'GPU Pod C\nvLLM',  x: 220,  y: 120, category: 'ml' },
+            { id: 'kvcache',  type: 'text', text: 'KV Cache',         x: 460,  y: 0,   category: 'cache' },
+            { id: 'weights',  type: 'text', text: 'Model Weights\nS3',x: 460,  y: 160, category: 'database' },
+          ],
+          edges: [
+            { id: 'm1', fromNode: 'lb',   toNode: 'gpu1' },
+            { id: 'm2', fromNode: 'lb',   toNode: 'gpu2' },
+            { id: 'm3', fromNode: 'lb',   toNode: 'gpu3' },
+            { id: 'm4', fromNode: 'gpu1', toNode: 'kvcache' },
+            { id: 'm5', fromNode: 'gpu2', toNode: 'kvcache' },
+            { id: 'm6', fromNode: 'gpu3', toNode: 'kvcache' },
+            { id: 'm7', fromNode: 'gpu2', toNode: 'weights', label: 'load' },
+          ],
+        },
+      };
+
+      SystemCanvas.render(document.getElementById('app'), {
+        canvas,
+        canvases,
+        theme: 'midnight',
+        edgeStyle: 'bezier',
+        rootLabel: 'AI Platform',
+      });
+    </script>
+  </body>
+</html>

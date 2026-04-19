@@ -23,6 +23,10 @@ export function findLaneAt(
  *
  * `edge: 'start'` (default) snaps to the lane's start edge — useful for
  * snapping a node's x/y when you want nodes to left/top-align in their lane.
+ * `edge: 'center'` snaps so an object of the given `size` is centered
+ * within the lane — useful when nodes sit visually centered in their row
+ * or column. Requires `size` to behave as expected; falls back to `start`
+ * behavior when `size` is 0.
  * `edge: 'nearest'` snaps to whichever boundary (start, end, or any interior
  * divider between two adjacent lanes) is closest — useful when the user
  * drags across lane borders.
@@ -37,27 +41,38 @@ export function findLaneAt(
 export function snapToLane(
   pos: number,
   lanes: CanvasLane[] | undefined,
-  options: { edge?: 'start' | 'nearest'; size?: number } = {}
+  options: { edge?: 'start' | 'center' | 'nearest'; size?: number } = {}
 ): number {
   if (!lanes || lanes.length === 0) return pos
   const edge = options.edge ?? 'start'
   const size = options.size ?? 0
 
-  if (edge === 'start') {
-    // Prefer the lane whose body contains `pos`; else the lane whose
-    // start is closest to `pos`.
-    const containing = findLaneAt(pos, lanes)
-    if (containing) return containing.start
-    let best = lanes[0]
-    let bestDist = Math.abs(pos - best.start)
-    for (const lane of lanes) {
-      const d = Math.abs(pos - lane.start)
-      if (d < bestDist) {
-        best = lane
-        bestDist = d
+  if (edge === 'start' || edge === 'center') {
+    // Use the object's center for lane selection so a node doesn't flip
+    // into the neighbor lane just because its top/left edge crosses a
+    // divider. Prefer the lane whose body contains the center; fall back
+    // to nearest-start by center.
+    const center = pos + size / 2
+    const containing = findLaneAt(center, lanes)
+    let target: CanvasLane
+    if (containing) {
+      target = containing
+    } else {
+      let best = lanes[0]
+      let bestDist = Math.abs(center - (best.start + best.size / 2))
+      for (const lane of lanes) {
+        const d = Math.abs(center - (lane.start + lane.size / 2))
+        if (d < bestDist) {
+          best = lane
+          bestDist = d
+        }
       }
+      target = best
     }
-    return best.start
+    if (edge === 'center') {
+      return target.start + (target.size - size) / 2
+    }
+    return target.start
   }
 
   // 'nearest': consider every lane boundary (start of each lane, plus end
