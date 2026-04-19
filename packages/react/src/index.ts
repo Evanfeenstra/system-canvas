@@ -1,6 +1,9 @@
 // Main component
 export { SystemCanvas } from './components/SystemCanvas.js'
-export type { SystemCanvasProps } from './components/SystemCanvas.js'
+export type {
+  SystemCanvasProps,
+  SystemCanvasHandle,
+} from './components/SystemCanvas.js'
 
 // Individual components (for custom composition)
 export { Viewport, type ViewportHandle } from './components/Viewport.js'

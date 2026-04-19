@@ -205,8 +205,8 @@ export function createNodeFromOption(
     case 'file':
       base.file = ''
       if (option.kind === 'type') {
-        base.width = 200
-        base.height = 60
+        base.width = 160
+        base.height = 52
       }
       break
     case 'link':

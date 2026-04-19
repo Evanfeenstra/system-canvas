@@ -123,7 +123,11 @@ interface ViewportProps {
 }
 
 export interface ViewportHandle {
-  zoomToNode: (node: ResolvedNode, onComplete?: () => void) => void
+  zoomToNode: (
+    node: ResolvedNode,
+    onComplete?: () => void,
+    options?: { durationMs?: number; targetZoom?: number }
+  ) => void
   fitToContent: (nodes: ResolvedNode[], animate?: boolean) => void
   setTransform: (
     transform: ViewportState,
@@ -242,9 +246,9 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
     const [hoveredSide, setHoveredSide] = useState<Side | null>(null)
 
     useImperativeHandle(ref, () => ({
-      zoomToNode: (node, onComplete) => {
+      zoomToNode: (node, onComplete, options) => {
         navigatingRef.current = true
-        zoomToNode(node, onComplete)
+        zoomToNode(node, onComplete, options)
       },
       fitToContent,
       setTransform,
