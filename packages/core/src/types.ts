@@ -314,6 +314,13 @@ export interface CanvasTheme {
    * color-swatch group derived from `presetColors`.
    */
   nodeActions?: NodeActionGroup[]
+  /**
+   * When true, suppress the trailing delete button in the node toolbar.
+   * Defaults to false (delete button shown). Consumers who want a custom
+   * delete action (confirmation dialog, soft-delete, etc.) can hide the
+   * built-in button and add their own via `nodeActions`.
+   */
+  hideToolbarDelete?: boolean
 }
 
 // ---------------------------------------------------------------------------

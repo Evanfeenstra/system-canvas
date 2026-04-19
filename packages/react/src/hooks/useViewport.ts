@@ -183,15 +183,18 @@ export function useViewport(options: UseViewportOptions): UseViewportResult {
       const nodeCx = node.x + node.width / 2
       const nodeCy = node.y + node.height / 2
 
-      // Zoom level: either caller-supplied, or fit-with-padding capped at 3x.
+      // Zoom level: either caller-supplied, or fit-with-padding capped at 12x.
+      // We zoom in aggressively so the click-to-navigate motion feels like
+      // a real "dive into" the node: the node fills most of the viewport
+      // before the sub-canvas fades in on top.
       let targetZoom: number
       if (options?.targetZoom != null) {
         targetZoom = options.targetZoom
       } else {
-        const padding = 40
+        const padding = 8
         const scaleX = rect.width / (node.width + padding * 2)
         const scaleY = rect.height / (node.height + padding * 2)
-        targetZoom = Math.min(scaleX, scaleY, 3)
+        targetZoom = Math.min(scaleX, scaleY, 12)
       }
 
       const t = zoomIdentity
@@ -200,7 +203,7 @@ export function useViewport(options: UseViewportOptions): UseViewportResult {
 
       select(svg)
         .transition()
-        .duration(options?.durationMs ?? 500)
+        .duration(options?.durationMs ?? 900)
         .call(zoomBehaviorRef.current.transform as any, t)
         .on('end', () => {
           onComplete?.()

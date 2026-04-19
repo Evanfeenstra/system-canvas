@@ -134,6 +134,10 @@ Editing UI:
 - **Delete**: single-click selects (dashed outline for nodes, highlighted stroke for edges). The outer `<div>` has `tabIndex={0}` so Delete/Backspace fires `onNodeDelete` or `onEdgeDelete` depending on what's selected. Keys are scoped to the canvas — no window listener.
 - **Pan vs. drag**: d3-zoom's `.filter()` rejects any gesture whose target is inside `.system-canvas-node`, so node drags never double as canvas pans. Background drags still pan normally.
 
+### Node toolbar actions
+
+`theme.nodeActions: NodeActionGroup[]` drives the floating toolbar. Each group has a `kind`: `'swatches'` (colored dots), `'buttons'` (icon buttons), or `'menu'` (dropdown whose trigger reflects the currently-active action). When a theme declares `nodeActions`, it fully replaces the default color-swatch group (no auto-merge). Each `NodeAction` has a `patch` (object or `(node) => NodeUpdate`) that can mutate **any** node field — not just `color`. Combined with `isActive(node)` and `appliesTo(node)` this is the extension point for status pickers, type switchers, toggles, and cycles. The canonical pattern for roadmap-style UIs is a `swatches` group where each dot sets `{ category }` (and optionally `color`), with `isActive` keyed on `category` — so what looks like a color picker is actually a status picker. The trailing delete button is shown by default; set `theme.hideToolbarDelete = true` to suppress it (e.g. when the consumer wants a confirmation dialog or a custom delete action via `nodeActions`).
+
 ### Theme system
 
 Themes are plain objects implementing `CanvasTheme`. They control every visual aspect: background, grid, node styles, edge styles, group styles, breadcrumb styles, preset color mappings ("1"-"6"), and category definitions.

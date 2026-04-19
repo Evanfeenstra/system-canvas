@@ -263,7 +263,7 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
       prefetchThreshold: 0.4,
       landingScale: 1.2,
       landingPadding: 0.08,
-      fadeDuration: 200,
+      fadeDuration: 216,
     }
     if (!zoomNavigation) return { enabled: false, ...defaults }
     if (zoomNavigation === true) return { enabled: true, ...defaults }
@@ -589,6 +589,14 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
   // Zoom-then-navigate: animate toward the node, then swap canvas.
   // Also stash a parent frame so zoom-exit works on the way back out
   // (even though the entry was a click rather than a zoom).
+  //
+  // When the zoom animation finishes we capture the final viewport
+  // transform and feed it into `pendingHandoff` so that Viewport's
+  // canvas-change effect (a) applies the transform instantly on the new
+  // canvas instead of auto-fitting, and (b) runs the opacity fade. This
+  // makes the sub-canvas fade in on top of the zoomed-in parent node —
+  // visually continuous with the zoom motion, like a real zoom into the
+  // child document.
   const handleNavigableNodeClick = useCallback(
     (node: ResolvedNode) => {
       const frame: ParentFrame = {
@@ -604,6 +612,11 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
       const handle = viewportHandleRef.current
       if (handle) {
         handle.zoomToNode(node, () => {
+          // Freeze the just-finished transform as the handoff so the
+          // sub-canvas renders in-place and then fades in, instead of
+          // the default snap-fit.
+          const finalVp = viewportStateRef.current
+          if (finalVp) setPendingHandoff({ ...finalVp })
           navigateToRef(node)
         })
       } else {

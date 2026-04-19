@@ -203,6 +203,7 @@ function DefaultToolbarContent({
   onDelete,
 }: DefaultToolbarContentProps) {
   const groups = useMemo(() => getNodeActions(theme), [theme])
+  const showDelete = !theme.hideToolbarDelete
 
   return (
     <>
@@ -217,8 +218,12 @@ function DefaultToolbarContent({
           />
         </React.Fragment>
       ))}
-      <Divider theme={theme} />
-      <DeleteButton theme={theme} onDelete={onDelete} />
+      {showDelete && (
+        <>
+          <Divider theme={theme} />
+          <DeleteButton theme={theme} onDelete={onDelete} />
+        </>
+      )}
     </>
   )
 }
