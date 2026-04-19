@@ -227,6 +227,13 @@ export interface LanesTheme {
  * floating node toolbar. Each action carries its own visual treatment and
  * the patch it applies — themes declare these so the library can render a
  * generic toolbar without knowing the consumer's domain.
+ *
+ * The library has no opinion about what actions represent. Common uses:
+ *   - Status toggles (planned / in-progress / done) via `customData` patches
+ *   - Category switchers (initiative / milestone / service / database)
+ *   - Color palettes tied to `color` or `customData`
+ *   - Priority markers, owners, tags — anything the consumer can express
+ *     as a patch to a CanvasNode.
  */
 export interface NodeAction {
   /** Stable id, unique within its group. */
