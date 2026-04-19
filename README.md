@@ -6,10 +6,11 @@ Interactive, infinitely zoomable, editable SVG diagrams from JSON Canvas documen
 
 ## Packages
 
-| Package               | Description                                                                          |
-| --------------------- | ------------------------------------------------------------------------------------ |
-| `system-canvas`       | Pure TypeScript core. Types, themes, edge routing, viewport math. Zero dependencies. |
-| `system-canvas-react` | React components. Pan/zoom viewport, node renderers, breadcrumb navigation.          |
+| Package                    | Description                                                                          |
+| -------------------------- | ------------------------------------------------------------------------------------ |
+| `system-canvas`            | Pure TypeScript core. Types, themes, edge routing, viewport math. Zero dependencies. |
+| `system-canvas-react`      | React components. Pan/zoom viewport, node renderers, breadcrumb navigation.          |
+| `system-canvas-standalone` | Self-contained IIFE bundle for `<script>` tag / CDN use. No build step required.     |
 
 ## Install
 
@@ -64,6 +65,26 @@ function App() {
     </div>
   );
 }
+```
+
+## Standalone (no build step)
+
+```html
+<div id="app" style="width: 100vw; height: 100vh"></div>
+<script src="https://unpkg.com/system-canvas-standalone/dist/system-canvas.min.js"></script>
+<script>
+  SystemCanvas.render(document.getElementById("app"), {
+    canvas: {
+      nodes: [
+        { id: "a", type: "text", text: "API", x: 0, y: 0, width: 120, height: 60, color: "4" },
+        { id: "b", type: "text", text: "DB", x: 220, y: 0, width: 120, height: 60, color: "6" },
+      ],
+      edges: [{ id: "e1", fromNode: "a", toNode: "b" }],
+    },
+    theme: "midnight",
+    editable: true,
+  });
+</script>
 ```
 
 ## Features
