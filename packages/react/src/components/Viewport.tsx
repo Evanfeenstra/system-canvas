@@ -9,6 +9,7 @@ import React, {
 } from 'react'
 import type {
   CanvasEdge,
+  CanvasLane,
   ResolvedNode,
   CanvasTheme,
   EdgeStyle,
@@ -25,6 +26,7 @@ import { NodeEditor } from './NodeEditor.js'
 import { EdgeLabelEditor } from './EdgeLabelEditor.js'
 import { ConnectionHandles } from './ConnectionHandles.js'
 import { PendingEdgeRenderer } from './PendingEdgeRenderer.js'
+import { LanesBackground } from './LanesBackground.js'
 import type { ResizeCorner, ResizeOverride } from '../hooks/useNodeResize.js'
 import type { PendingEdgeState } from '../hooks/useEdgeCreate.js'
 
@@ -50,6 +52,8 @@ interface ViewportProps {
   nodeMap: Map<string, ResolvedNode>
   theme: CanvasTheme
   edgeStyle: EdgeStyle
+  columns?: CanvasLane[]
+  rows?: CanvasLane[]
   minZoom: number
   maxZoom: number
   defaultViewport?: ViewportState
@@ -119,7 +123,11 @@ interface ViewportProps {
 }
 
 export interface ViewportHandle {
-  zoomToNode: (node: ResolvedNode, onComplete?: () => void) => void
+  zoomToNode: (
+    node: ResolvedNode,
+    onComplete?: () => void,
+    options?: { durationMs?: number; targetZoom?: number }
+  ) => void
   fitToContent: (nodes: ResolvedNode[], animate?: boolean) => void
   setTransform: (
     transform: ViewportState,
@@ -137,6 +145,8 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
       nodeMap,
       theme,
       edgeStyle,
+      columns,
+      rows,
       minZoom,
       maxZoom,
       defaultViewport,
@@ -236,9 +246,9 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
     const [hoveredSide, setHoveredSide] = useState<Side | null>(null)
 
     useImperativeHandle(ref, () => ({
-      zoomToNode: (node, onComplete) => {
+      zoomToNode: (node, onComplete, options) => {
         navigatingRef.current = true
-        zoomToNode(node, onComplete)
+        zoomToNode(node, onComplete, options)
       },
       fitToContent,
       setTransform,
@@ -492,6 +502,9 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
         {/* Transformable group -- d3-zoom applies transforms here.
             Fade-in on handoff is applied directly via groupRef's style. */}
         <g ref={groupRef}>
+          {/* Lane bands sit behind every node, edge, and group. */}
+          <LanesBackground columns={columns} rows={rows} theme={theme} />
+
           {/* Groups first (behind everything) */}
           <NodeRenderer
             nodes={renderNodes}

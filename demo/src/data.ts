@@ -805,139 +805,66 @@ export const podWorkerCanvas: CanvasData = {
 }
 
 /**
- * Sub-canvas: Sandbox — the Firecracker microVM internals that host
- * each agent's workspace.
+ * Sub-canvas: Sandbox — the Firecracker microVM internals that host each
+ * agent's workspace.
+ *
+ * Layout: a three-lane timeline on the right, with config files pinned to
+ * the left as the "inputs" that the VMM reads. The x-axis within the lanes
+ * reads left-to-right as boot order. The blue group wraps the whole thing.
+ *
+ *   ┌─── Firecracker microVM group ─────────────────────────────────────┐
+ *   │                                                                   │
+ *   │  [Dockerfile]     Boot:  [VMM] → [Kernel] → [Init]                │
+ *   │                                                                   │
+ *   │  [vm/config.json] Workspace:  [FS] [Tools] [Runtimes]             │
+ *   │                                                                   │
+ *   │                   Security:  [seccomp] [vsock] [Metrics]          │
+ *   └───────────────────────────────────────────────────────────────────┘
  */
+const SANDBOX_ROW = 90
+
+// The lanes start to the right of the files column so the left header
+// strip lines up with just the lane content, not the files.
+const FILES_X = 0
+const LANES_X = 260
+
 export const sandboxCanvas: CanvasData = {
+  rows: [
+    { id: 'boot',      label: 'Boot',           start: 0,                size: SANDBOX_ROW },
+    { id: 'workspace', label: 'Workspace',      start: SANDBOX_ROW,      size: SANDBOX_ROW },
+    { id: 'security',  label: 'Security & I/O', start: SANDBOX_ROW * 2,  size: SANDBOX_ROW },
+  ],
   nodes: [
+    // Blue group wraps everything: files column + lane grid.
     {
       id: 'sb-group',
       type: 'group',
       x: -20,
       y: -20,
-      width: 780,
-      height: 380,
+      width: 1000,
+      height: SANDBOX_ROW * 3 + 40,
       label: 'Firecracker microVM',
       color: '5',
     },
 
-    // Boot / kernel row
-    {
-      id: 'vmm',
-      type: 'text',
-      text: 'Firecracker VMM\nhost process',
-      x: 0,
-      y: 20,
-      width: 200,
-      height: 55,
-      color: '5',
-    },
-    {
-      id: 'kernel',
-      type: 'text',
-      text: 'Linux Kernel\n5.10 minimal',
-      x: 240,
-      y: 20,
-      width: 200,
-      height: 55,
-      color: '2',
-    },
-    {
-      id: 'init',
-      type: 'text',
-      text: 'Init\nguest agent',
-      x: 480,
-      y: 20,
-      width: 200,
-      height: 55,
-      color: '2',
-    },
+    // --- Files column (left of the lanes) ---
+    { id: 'dockerfile', type: 'file', file: 'rootfs/Dockerfile', x: FILES_X, y: 30,  width: 220, height: 40, color: '5' },
+    { id: 'vm-config',  type: 'file', file: 'vm/config.json',    x: FILES_X, y: 200, width: 220, height: 40, color: '5' },
 
-    // Workspace row: what the agent actually has access to
-    {
-      id: 'workspace-fs',
-      type: 'text',
-      text: 'Workspace FS\ncloned repo',
-      x: 0,
-      y: 120,
-      width: 200,
-      height: 55,
-      color: '4',
-    },
-    {
-      id: 'tool-runtime',
-      type: 'text',
-      text: 'Tool Runtime\nshell + editors',
-      x: 240,
-      y: 120,
-      width: 200,
-      height: 55,
-      color: '4',
-    },
-    {
-      id: 'lang-runtimes',
-      type: 'text',
-      text: 'Language Runtimes\nnode / python / rust',
-      x: 480,
-      y: 120,
-      width: 200,
-      height: 55,
-      color: '4',
-    },
+    // --- Boot lane (row 0) ---
+    { id: 'vmm',    type: 'text', text: 'Firecracker VMM\nhost process', x: LANES_X,       y: 17, width: 200, height: 55, color: '5' },
+    { id: 'kernel', type: 'text', text: 'Linux Kernel\n5.10 minimal',    x: LANES_X + 240, y: 17, width: 200, height: 55, color: '2' },
+    { id: 'init',   type: 'text', text: 'Init\nguest agent',             x: LANES_X + 480, y: 17, width: 200, height: 55, color: '2' },
 
-    // Security / IO row
-    {
-      id: 'seccomp',
-      type: 'text',
-      text: 'seccomp\nsyscall filter',
-      x: 0,
-      y: 220,
-      width: 200,
-      height: 55,
-      color: '6',
-    },
-    {
-      id: 'vsock',
-      type: 'text',
-      text: 'vsock\nhost bridge',
-      x: 240,
-      y: 220,
-      width: 200,
-      height: 55,
-      color: '3',
-    },
-    {
-      id: 'metrics',
-      type: 'text',
-      text: 'Metrics\ncpu / mem / io',
-      x: 480,
-      y: 220,
-      width: 200,
-      height: 55,
-      color: '3',
-    },
+    // --- Workspace lane (row 1) ---
+    { id: 'workspace-fs',  type: 'text', text: 'Workspace FS\ncloned repo',              x: LANES_X,       y: 107, width: 200, height: 55, color: '4' },
+    { id: 'tool-runtime',  type: 'text', text: 'Tool Runtime\nshell + editors',          x: LANES_X + 240, y: 107, width: 200, height: 55, color: '4' },
+    { id: 'lang-runtimes', type: 'text', text: 'Language Runtimes\nnode / python / rust', x: LANES_X + 480, y: 107, width: 200, height: 55, color: '4' },
 
-    // Files visible to the agent
-    {
-      id: 'dockerfile',
-      type: 'file',
-      file: 'rootfs/Dockerfile',
-      x: 120,
-      y: 310,
-      width: 200,
-      height: 40,
-      color: '5',
-    },
-    {
-      id: 'vm-config',
-      type: 'file',
-      file: 'vm/config.json',
-      x: 360,
-      y: 310,
-      width: 200,
-      height: 40,
-      color: '5',
-    },
+    // --- Security & I/O lane (row 2) ---
+    { id: 'seccomp', type: 'text', text: 'seccomp\nsyscall filter', x: LANES_X,       y: 197, width: 200, height: 55, color: '6' },
+    { id: 'vsock',   type: 'text', text: 'vsock\nhost bridge',      x: LANES_X + 240, y: 197, width: 200, height: 55, color: '3' },
+    { id: 'metrics', type: 'text', text: 'Metrics\ncpu / mem / io', x: LANES_X + 480, y: 197, width: 200, height: 55, color: '3' },
   ],
   edges: [
     { id: 'sb-e1', fromNode: 'vmm', fromSide: 'right', toNode: 'kernel', toSide: 'left', label: 'boots' },

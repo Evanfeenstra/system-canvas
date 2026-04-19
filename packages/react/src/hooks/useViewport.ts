@@ -19,7 +19,11 @@ interface UseViewportResult {
   fitToContent: (nodes: ResolvedNode[], animate?: boolean) => void
   resetZoom: () => void
   /** Animate zoom to center on a node, then call onComplete */
-  zoomToNode: (node: ResolvedNode, onComplete?: () => void) => void
+  zoomToNode: (
+    node: ResolvedNode,
+    onComplete?: () => void,
+    options?: { durationMs?: number; targetZoom?: number }
+  ) => void
   /**
    * Imperatively set the viewport transform. When `animate` is false the
    * transform is applied instantly (used for the seamless zoom-navigation
@@ -162,7 +166,11 @@ export function useViewport(options: UseViewportOptions): UseViewportResult {
   )
 
   const zoomToNode = useCallback(
-    (node: ResolvedNode, onComplete?: () => void) => {
+    (
+      node: ResolvedNode,
+      onComplete?: () => void,
+      options?: { durationMs?: number; targetZoom?: number }
+    ) => {
       const svg = svgRef.current
       if (!svg || !zoomBehaviorRef.current) {
         onComplete?.()
@@ -175,11 +183,16 @@ export function useViewport(options: UseViewportOptions): UseViewportResult {
       const nodeCx = node.x + node.width / 2
       const nodeCy = node.y + node.height / 2
 
-      // Zoom level: fit the node with modest padding, but cap at 3x
-      const padding = 40
-      const scaleX = rect.width / (node.width + padding * 2)
-      const scaleY = rect.height / (node.height + padding * 2)
-      const targetZoom = Math.min(scaleX, scaleY, 3)
+      // Zoom level: either caller-supplied, or fit-with-padding capped at 3x.
+      let targetZoom: number
+      if (options?.targetZoom != null) {
+        targetZoom = options.targetZoom
+      } else {
+        const padding = 40
+        const scaleX = rect.width / (node.width + padding * 2)
+        const scaleY = rect.height / (node.height + padding * 2)
+        targetZoom = Math.min(scaleX, scaleY, 3)
+      }
 
       const t = zoomIdentity
         .translate(rect.width / 2 - nodeCx * targetZoom, rect.height / 2 - nodeCy * targetZoom)
@@ -187,7 +200,7 @@ export function useViewport(options: UseViewportOptions): UseViewportResult {
 
       select(svg)
         .transition()
-        .duration(500)
+        .duration(options?.durationMs ?? 500)
         .call(zoomBehaviorRef.current.transform as any, t)
         .on('end', () => {
           onComplete?.()

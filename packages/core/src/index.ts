@@ -18,6 +18,8 @@ export type {
   EdgeTheme,
   GroupTheme,
   BreadcrumbTheme,
+  LanesTheme,
+  CanvasLane,
   CanvasTheme,
   ResolvedNode,
   AnchorPoint,
@@ -28,6 +30,8 @@ export type {
   NodeUpdate,
   EdgeUpdate,
   NodeMenuOption,
+  NodeAction,
+  NodeActionGroup,
 } from './types.js'
 
 // Themes
@@ -37,6 +41,7 @@ export {
   lightTheme,
   blueprintTheme,
   warmTheme,
+  roadmapTheme,
   resolveTheme,
   resolveColor,
   resolveNode,
@@ -56,6 +61,17 @@ export {
   canvasToScreen,
 } from './rendering/index.js'
 export type { Rect } from './rendering/index.js'
+
+// Lane helpers
+export { findLaneAt, snapToLane, evenLanes, lanesExtent } from './lanes.js'
+
+// Action helpers
+export {
+  resolveActionPatch,
+  buildDefaultColorActions,
+  getNodeActions,
+  filterActionsForNode,
+} from './actions.js'
 
 // Canvas helpers
 export {
@@ -82,6 +98,7 @@ import { midnightTheme as _midnight } from './themes/midnight.js'
 import { lightTheme as _light } from './themes/light.js'
 import { blueprintTheme as _blueprint } from './themes/blueprint.js'
 import { warmTheme as _warm } from './themes/warm.js'
+import { roadmapTheme as _roadmap } from './themes/roadmap.js'
 
 export const themes = {
   dark: _dark,
@@ -89,4 +106,5 @@ export const themes = {
   light: _light,
   blueprint: _blueprint,
   warm: _warm,
+  roadmap: _roadmap,
 } as const

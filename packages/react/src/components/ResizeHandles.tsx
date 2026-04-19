@@ -13,20 +13,6 @@ interface ResizeHandlesProps {
 }
 
 const HANDLE_SIZE = 7
-/**
- * Corners are nudged inward along both axes so that, with rounded node
- * corners, the handle square visually sits inside the curve rather than
- * straddling it (which otherwise leaves a stub poking out past the rounded
- * edge). The inset scales with the node's own resolved corner radius,
- * clamped so it's never zero and never so large it crowds small nodes.
- *
- * Small corners (r≤6) → 1px inset (floor).
- * Groups (r≈12) → ~6px inset.
- */
-const computeCornerInset = (cornerRadius: number) => {
-  if (cornerRadius <= 6) return 1
-  return Math.min(cornerRadius * 0.5, 8)
-}
 
 const CORNERS: { corner: ResizeCorner; cursor: string; anchor: 'nw' | 'ne' | 'sw' | 'se' }[] = [
   { corner: 'nw', cursor: 'nwse-resize', anchor: 'nw' },
@@ -36,12 +22,29 @@ const CORNERS: { corner: ResizeCorner; cursor: string; anchor: 'nw' | 'ne' | 'sw
 ]
 
 /**
+ * Gentle per-radius inset. A square corner (r=0) gets no inset — the handle
+ * sits centered on the geometric corner. As the radius grows, the handle is
+ * nudged inward just slightly so it doesn't drift fully outside the rounded
+ * outline for larger radii like groups (r=12) or outcome nodes (r=14).
+ *
+ * Capped at 3px so we never push the handle visibly inward from the corner —
+ * the handle's half-width is 3.5px, so even at the cap the outer edge of the
+ * handle still pokes ~0.5px past the bbox corner.
+ */
+const cornerInset = (cornerRadius: number) =>
+  Math.min(cornerRadius * 0.25, 3)
+
+/**
  * Renders four small squares at the corners of a selected node. Pointer-down
  * on a handle starts a resize gesture.
  *
  * Placed inside the node's <g> but rendered AFTER the ref indicator so it
  * sits on top of any carved corner. Solid-filled in the node's own stroke
  * color so they read as part of the node; the hovered corner grows slightly.
+ *
+ * Each handle sits at (or very near) the node's geometric corner: a small
+ * radius-proportional inset keeps it visually attached to the outline on
+ * larger rounded corners without pulling it noticeably toward the center.
  */
 export function ResizeHandles({ node, theme, onHandlePointerDown }: ResizeHandlesProps) {
   const { x, y, width, height } = node
@@ -49,7 +52,7 @@ export function ResizeHandles({ node, theme, onHandlePointerDown }: ResizeHandle
 
   const handleColor = node.resolvedStroke ?? theme.node.labelColor
 
-  const i = computeCornerInset(node.resolvedCornerRadius)
+  const i = cornerInset(node.resolvedCornerRadius)
   const anchorPos = (anchor: 'nw' | 'ne' | 'sw' | 'se') => {
     switch (anchor) {
       case 'nw':

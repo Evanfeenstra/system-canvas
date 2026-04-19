@@ -23,8 +23,10 @@ Pure TypeScript. No React, no DOM, no dependencies. Any framework adapter import
 
 - `src/types.ts` — All TypeScript interfaces. This is the source of truth for the data model.
 - `src/canvas.ts` — Canvas data helpers: resolve nodes, build lookup maps, validate, get labels, find group children, and editing helpers (`addNode`, `updateNode`, `removeNode`, `addEdge`, `updateEdge`, `removeEdge`, `generateNodeId`, `generateEdgeId`, `getNodeMenuOptions`, `createNodeFromOption`).
-- `src/themes/` — Five pre-made themes (dark, midnight, light, blueprint, warm) plus the resolver that merges partial themes and resolves colors/categories.
+- `src/actions.ts` — Pure helpers for the node-toolbar action system: `getNodeActions(theme)` (returns theme's `nodeActions` or a generated default color-swatch group from `presetColors`), `buildDefaultColorActions(theme)`, `filterActionsForNode(group, node)`, `resolveActionPatch(action, node)`.
+- `src/themes/` — Six pre-made themes (dark, midnight, light, blueprint, warm, roadmap) plus the resolver that merges partial themes and resolves colors/categories.
 - `src/rendering/` — Pure math: anchor point computation, edge path routing (bezier/straight/orthogonal), viewport transforms, bounding box calculation.
+- `src/lanes.ts` — Pure helpers for the lane primitive (columns/rows): `findLaneAt`, `snapToLane`, `evenLanes`, `lanesExtent`. Zero opinion about what lanes represent (dates, ordinal buckets, teams, phases — it's all the same to the library).
 
 ### system-canvas-react
 
@@ -41,7 +43,10 @@ React bindings. Depends on `system-canvas` for all types and math.
 - `src/components/NodeEditor.tsx` — Inline editor rendered via `<foreignObject>` for text/file/link/group fields.
 - `src/components/EdgeLabelEditor.tsx` — Inline edge label editor rendered via `<foreignObject>` centered on the edge midpoint.
 - `src/components/AddNodeButton.tsx` — Default floating "+" FAB and add-node popover menu.
+- `src/components/NodeToolbar.tsx` — Floating toolbar rendered as an HTML overlay above the selected node in editable mode. Tracks the viewport via `requestAnimationFrame` for fixed-pixel sizing at any zoom; flips below the node when near the viewport top. Reads `theme.nodeActions` (or a generated color-swatch default) and renders three group kinds: `swatches` (colored dots), `buttons` (icon buttons), `menu` (dropdown/popover). Always appends a trailing delete button. Fully replaceable via the `renderNodeToolbar` render prop, which receives `{ node, theme, patch, deleteNode }` — in that case the library still positions the container and the consumer draws its contents.
 - `src/components/Breadcrumbs.tsx` — Navigation breadcrumb trail overlay.
+- `src/components/LanesBackground.tsx` — Renders column/row bands in canvas-space. Sits inside the transformable `<g>` behind all nodes/edges. Draws alternating fills, optional per-lane color overrides, and dividers between adjacent lanes.
+- `src/components/LaneHeaders.tsx` — Screen-space overlay that renders pinned column labels (top strip) and row labels (left strip). Polls the viewport via `requestAnimationFrame` to keep in sync with d3-zoom transforms. Supports `pinned` (sticky to viewport edges) and non-pinned (scrolls with content) modes.
 - `src/hooks/useViewport.ts` — d3-zoom integration, fit-to-content. Rejects pan gestures originating inside `.system-canvas-node`, `.system-canvas-resize-handles`, or `.system-canvas-connection-handles` so node/resize/edge-create drags don't also pan.
 - `src/hooks/useNavigation.ts` — Ref-stack breadcrumb state; prefers the synchronous `canvases` map when present, falls back to `onResolveCanvas` with an internal async cache.
 - `src/hooks/useCanvasInteraction.ts` — Click, double-click, navigate, and context menu handler wiring for both nodes and edges; owns the "clicking one clears selection of the other" rule in editable mode.
@@ -60,6 +65,19 @@ Self-contained IIFE bundle for drop-in `<script>` tag use from a CDN. Bundles Re
 The returned `StandaloneInstance` exposes `getCanvas()`, `getCanvases()`, `setCanvas(c)`, `setCanvasesMap(m)`, `update(partial)` (swap any options like theme/editable without remount), `on('change', cb)`, and `destroy()`. `update()` is the preferred way to mutate props post-mount; avoid `destroy` + re-`render` on the same element because React may race its async unmount against the new root.
 
 Themes can be passed as an object, a `Partial<CanvasTheme>` override, or a string name (`'dark' | 'midnight' | 'light' | 'blueprint' | 'warm'`). The wrapper also re-exports `themes` on the global so users can do `SystemCanvas.themes.midnight` for advanced composition.
+
+### Lanes (columns & rows)
+
+The library supports an optional generic **lanes** primitive — named horizontal or vertical bands rendered behind nodes and edges. Lanes are a pure rendering/snapping primitive: the library has no opinion about what they represent. Consumers use them for ordinal roadmap columns (Now/Next/Later), date-derived columns (Jan/Feb/Mar), phase names (Discovery/Build/Ship), swim-lane teams, kanban groupings, or anything else.
+
+- `CanvasData.columns?: CanvasLane[]` — vertical bands positioned along x.
+- `CanvasData.rows?: CanvasLane[]` — horizontal bands positioned along y.
+- Each `CanvasLane` is `{ id, label, start, size, color? }`. The consumer computes `start`/`size` however they like (even widths via `evenLanes(labels)`, date math, custom bucketing — whatever).
+- Bands render inside the transformable `<g>` so they pan and zoom with content; dividers are drawn with `vectorEffect="non-scaling-stroke"` so they stay crisp at any zoom.
+- Headers (pinned column labels on top, row labels on left) render as a screen-space SVG overlay above the viewport. Controlled by the `laneHeaders` prop: `'pinned'` (default), `'scroll'`, or `'none'`.
+- Setting the `snapToLanes` prop on `SystemCanvas` causes drags to snap a node's `x` to the nearest column's start and/or `y` to the nearest row's start on commit. Gated per-axis on whether `columns`/`rows` are defined.
+- Core ships pure helpers in `packages/core/src/lanes.ts`: `findLaneAt(pos, lanes)`, `snapToLane(pos, lanes, { edge: 'start' | 'nearest', size? })`, `evenLanes(labels, size?, start?)`, `lanesExtent(lanes)`.
+- The built-in `roadmap` theme (in `packages/core/src/themes/roadmap.ts`) pairs well with lanes — it ships categories for `initiative`, `milestone`, `outcome`, `blocker`, `parked`, plus a `lane` group category, and includes bespoke 16x16 icons (initiative, milestone, outcome, blocker, parked) shipped via the theme's `icons` map.
 
 ## Key concepts
 

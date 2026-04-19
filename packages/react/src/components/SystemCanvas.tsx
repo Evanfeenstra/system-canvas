@@ -1,4 +1,12 @@
-import React, { useMemo, useRef, useCallback, useState, useEffect } from 'react'
+import React, {
+  useMemo,
+  useRef,
+  useCallback,
+  useState,
+  useEffect,
+  useImperativeHandle,
+  forwardRef,
+} from 'react'
 import type {
   CanvasData,
   CanvasNode,
@@ -21,6 +29,7 @@ import {
   getNodeMenuOptions,
   createNodeFromOption,
   screenToCanvas,
+  snapToLane,
 } from 'system-canvas'
 import { useNavigation } from '../hooks/useNavigation.js'
 import { useCanvasInteraction } from '../hooks/useCanvasInteraction.js'
@@ -35,6 +44,8 @@ import {
 import { Viewport, type ViewportHandle } from './Viewport.js'
 import { Breadcrumbs } from './Breadcrumbs.js'
 import { AddNodeButton, type AddNodeButtonRenderProps } from './AddNodeButton.js'
+import { LaneHeaders } from './LaneHeaders.js'
+import { NodeToolbar, type NodeToolbarRenderProps } from './NodeToolbar.js'
 
 export interface SystemCanvasProps {
   /** Canvas data to render */
@@ -85,8 +96,37 @@ export interface SystemCanvasProps {
   /** Fully replace the default add-node FAB. */
   renderAddNodeButton?: (props: AddNodeButtonRenderProps) => React.ReactNode
 
+  /**
+   * Controls the floating toolbar that appears above a selected node in
+   * editable mode. Defaults to `true`. Pass `false` to suppress it entirely
+   * (consumers can still build their own UI via `onContextMenu`).
+   */
+  showNodeToolbar?: boolean
+
+  /**
+   * Fully replace the default node toolbar contents. The library still
+   * positions the toolbar container above the node; the render prop supplies
+   * its inner React nodes. Receives `{ node, theme, patch, deleteNode }`.
+   */
+  renderNodeToolbar?: (props: NodeToolbarRenderProps) => React.ReactNode
+
   // --- Theming ---
+  /**
+   * Theme applied to the entire canvas. When omitted, the library falls
+   * back to (in order): the current canvas's `theme.base` hint, then the
+   * root canvas's `theme.base` hint, then `darkTheme`. Supplying this
+   * prop forces the theme regardless of canvas-level hints.
+   */
   theme?: CanvasTheme | Partial<CanvasTheme>
+
+  /**
+   * Optional map of additional themes, keyed by name. Merged with the
+   * built-in themes (dark, midnight, light, blueprint, warm, roadmap) and
+   * consulted when a canvas declares `theme.base`. This is how you wire
+   * custom themes into the per-canvas theming mechanism — set
+   * `canvas.theme.base = 'kanban'` and the library looks it up here.
+   */
+  themes?: Record<string, CanvasTheme>
 
   // --- Edge rendering ---
   edgeStyle?: EdgeStyle
@@ -111,6 +151,25 @@ export interface SystemCanvasProps {
   autoFit?: 'canvas-change' | 'always' | 'initial' | 'never'
 
   /**
+   * Controls rendering of the lane header strips (column labels on top,
+   * row labels on the left) when the current canvas has `columns` or `rows`.
+   *
+   * - `'pinned'` (default): headers stay glued to the viewport edges,
+   *   so labels are always visible as the user pans/zooms.
+   * - `'scroll'`: headers live at the top/left of the lane grid and
+   *   move with the content.
+   * - `'none'`: no headers are drawn. The lane bands still render.
+   */
+  laneHeaders?: 'pinned' | 'scroll' | 'none'
+
+  /**
+   * When true and the current canvas has `columns` or `rows`, dragged nodes
+   * snap their x (for columns) and y (for rows) to the nearest lane start.
+   * Defaults to `false` so existing behavior is preserved.
+   */
+  snapToLanes?: boolean
+
+  /**
    * When enabled, zooming into a ref-bearing node past a threshold commits
    * the navigation and continues seamlessly inside the sub-canvas. Zooming
    * back out past a threshold pops to the parent. Accepts `true` for the
@@ -130,42 +189,77 @@ export interface SystemCanvasProps {
 const CASCADE_WINDOW_MS = 1500
 const CASCADE_OFFSET = 20
 
-export function SystemCanvas({
-  canvas,
-  onResolveCanvas,
-  canvases,
-  rootLabel = 'Home',
-  onNavigate,
-  onBreadcrumbClick,
-  onNodeClick,
-  onNodeDoubleClick,
-  onEdgeClick,
-  onEdgeDoubleClick,
-  onContextMenu,
-  editable = false,
-  onNodeAdd,
-  onNodeUpdate,
-  onNodeDelete,
-  onEdgeUpdate,
-  onEdgeDelete,
-  onEdgeAdd,
-  renderAddNodeButton,
-  theme: themeProp,
-  edgeStyle = 'bezier',
-  defaultViewport,
-  minZoom: minZoomProp,
-  maxZoom,
-  onViewportChange,
-  autoFit = 'canvas-change',
-  zoomNavigation = false,
-  className,
-  style,
-}: SystemCanvasProps) {
+/**
+ * Imperative handle exposed on the SystemCanvas component ref. Lets a
+ * parent drive the camera — e.g. play a cinematic tour that zooms through
+ * a chain of ref-bearing nodes.
+ */
+export interface SystemCanvasHandle {
+  /**
+   * Animate the camera into a node in the currently-viewed canvas, then
+   * (if the node has a `ref`) navigate into its sub-canvas and fit that
+   * sub-canvas to the viewport. Resolves when the new canvas has mounted
+   * and finished fitting, so consumers can chain `await` calls to build a
+   * multi-step tour.
+   *
+   * If the node has no `ref`, the zoom animation plays and the promise
+   * resolves without navigating.
+   */
+  zoomIntoNode: (
+    nodeId: string,
+    options?: { durationMs?: number; targetZoom?: number }
+  ) => Promise<void>
+  /** Navigate back up one level in the breadcrumb stack. */
+  navigateBack: () => void
+  /** Reset to the root canvas. */
+  navigateToRoot: () => void
+}
+
+export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
+  function SystemCanvas(
+    {
+      canvas,
+      onResolveCanvas,
+      canvases,
+      rootLabel = 'Home',
+      onNavigate,
+      onBreadcrumbClick,
+      onNodeClick,
+      onNodeDoubleClick,
+      onEdgeClick,
+      onEdgeDoubleClick,
+      onContextMenu,
+      editable = false,
+      onNodeAdd,
+      onNodeUpdate,
+      onNodeDelete,
+      onEdgeUpdate,
+      onEdgeDelete,
+      onEdgeAdd,
+      renderAddNodeButton,
+      showNodeToolbar = true,
+      renderNodeToolbar,
+      theme: themeProp,
+      themes: customThemes,
+      edgeStyle = 'bezier',
+      defaultViewport,
+      minZoom: minZoomProp,
+      maxZoom,
+      onViewportChange,
+      autoFit = 'canvas-change',
+      laneHeaders = 'pinned',
+      snapToLanes = false,
+      zoomNavigation = false,
+      className,
+      style,
+    },
+    forwardedRef
+  ) {
   // Resolve zoom-nav config
   const zoomNavConfig = useMemo(() => {
     const defaults = {
-      enterThreshold: 0.7,
-      exitThreshold: 0.2,
+      enterThreshold: 0.66,
+      exitThreshold: 0.33,
       prefetchThreshold: 0.4,
       landingScale: 1.2,
       landingPadding: 0.08,
@@ -205,23 +299,6 @@ export function SystemCanvas({
       )
     }
   }, [editable, canvases])
-
-  // Resolve theme: prop theme > canvas-level base hint > darkTheme
-  const theme = useMemo(() => {
-    let base: CanvasTheme
-    if (themeProp) {
-      if ('name' in themeProp && 'background' in themeProp && 'grid' in themeProp) {
-        base = themeProp as CanvasTheme
-      } else {
-        base = resolveTheme(themeProp as Partial<CanvasTheme>)
-      }
-    } else if (canvas.theme?.base && canvas.theme.base in themes) {
-      base = themes[canvas.theme.base as keyof typeof themes]
-    } else {
-      base = darkTheme
-    }
-    return base
-  }, [themeProp, canvas.theme?.base])
 
   // Zoom-navigation state: stack of parent frames, one per breadcrumb
   // entry beyond root. parentFrames[i] describes how we entered the
@@ -273,6 +350,36 @@ export function SystemCanvas({
     onBreadcrumbClick: handleBreadcrumbClick,
   })
 
+  // Resolve theme with per-canvas awareness.
+  //
+  //   1. An explicit `theme` prop always wins — consumer is in full control.
+  //   2. Else if the *currently-viewed* canvas declares `theme.base`, use
+  //      that. This is what enables "zoom into a node, land in a themed
+  //      sub-canvas" UX — navigate between canvases and the theme swaps
+  //      automatically. Names are resolved against the built-in `themes`
+  //      registry plus any `customThemes` the consumer provided.
+  //   3. Else if the *root* canvas declares `theme.base`, use that (so the
+  //      root's preference carries to sub-canvases that don't specify one).
+  //   4. Else fall back to `darkTheme`.
+  const theme = useMemo(() => {
+    const registry: Record<string, CanvasTheme> = { ...themes, ...customThemes }
+
+    const resolveByName = (name: string | undefined): CanvasTheme | null =>
+      name && registry[name] ? registry[name] : null
+
+    if (themeProp) {
+      if ('name' in themeProp && 'background' in themeProp && 'grid' in themeProp) {
+        return themeProp as CanvasTheme
+      }
+      return resolveTheme(themeProp as Partial<CanvasTheme>)
+    }
+    return (
+      resolveByName(currentCanvas.theme?.base) ??
+      resolveByName(canvas.theme?.base) ??
+      darkTheme
+    )
+  }, [themeProp, customThemes, currentCanvas.theme?.base, canvas.theme?.base])
+
   // Resolve canvas data (apply theme, categories, defaults)
   const { nodes, edges, nodeMap } = useMemo(() => {
     const resolved = resolveCanvas(currentCanvas, theme)
@@ -291,6 +398,69 @@ export function SystemCanvas({
   )
   const viewportHandleRef = useRef<ViewportHandle>(null)
 
+  // Stable refs used by the imperative handle. We keep them updated on
+  // every render so the handle methods (created once via
+  // useImperativeHandle) always see fresh state without forcing
+  // consumers to re-capture the handle on every canvas swap.
+  const navigateToRefRef = useRef<typeof navigateToRef>(navigateToRef)
+  navigateToRefRef.current = navigateToRef
+  const navigateToBreadcrumbRef = useRef<typeof navigateToBreadcrumb>(
+    navigateToBreadcrumb
+  )
+  navigateToBreadcrumbRef.current = navigateToBreadcrumb
+  const breadcrumbsRef = useRef(breadcrumbs)
+  breadcrumbsRef.current = breadcrumbs
+
+  // Expose an imperative API for programmatic camera control (tours, etc.)
+  useImperativeHandle(
+    forwardedRef,
+    () => ({
+      zoomIntoNode: (nodeId, options) => {
+        return new Promise<void>((resolve) => {
+          const node = nodesRef.current.find((n) => n.id === nodeId)
+          const handle = viewportHandleRef.current
+          if (!node || !handle) {
+            resolve()
+            return
+          }
+          // Phase 1: animate the camera into the node.
+          handle.zoomToNode(
+            node,
+            () => {
+              // Phase 2: if the node has a ref, navigate into the
+              // sub-canvas. `navigateToRef` is async (may fetch data).
+              if (!node.ref) {
+                resolve()
+                return
+              }
+              void navigateToRefRef.current(node).then(() => {
+                // Give React two frames to render the new canvas so that
+                // the next `zoomIntoNode` call — which reads
+                // `nodesRef.current` — sees the freshly-mounted sub-canvas
+                // nodes. The first rAF lets React commit, the second lets
+                // the post-commit effects (including auto-fit) run.
+                requestAnimationFrame(() => {
+                  requestAnimationFrame(() => resolve())
+                })
+              })
+            },
+            options
+          )
+        })
+      },
+      navigateBack: () => {
+        const crumbs = breadcrumbsRef.current
+        if (crumbs.length > 1) {
+          navigateToBreadcrumbRef.current(crumbs.length - 2)
+        }
+      },
+      navigateToRoot: () => {
+        navigateToBreadcrumbRef.current(0)
+      },
+    }),
+    [forwardedRef]
+  )
+
   // Selection + editing state (editable mode)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -305,12 +475,54 @@ export function SystemCanvas({
     setEditingEdgeId(null)
   }, [currentCanvasRef])
 
-  // Drag
+  // Container size — tracked so the lane-header overlay can size itself.
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const [containerSize, setContainerSize] = useState<{ width: number; height: number }>(
+    { width: 0, height: 0 }
+  )
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const update = () => {
+      const r = el.getBoundingClientRect()
+      setContainerSize({ width: r.width, height: r.height })
+    }
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  const hasLanes =
+    (currentCanvas.columns && currentCanvas.columns.length > 0) ||
+    (currentCanvas.rows && currentCanvas.rows.length > 0)
+  const showLaneHeaders = hasLanes && laneHeaders !== 'none'
+
+  const getViewportState = useCallback(
+    () => viewportStateRef.current ?? { x: 0, y: 0, zoom: 1 },
+    []
+  )
+
+  // Drag. If snapToLanes is on and the canvas has lanes, snap the committed
+  // x (to column start) and/or y (to row start) before forwarding the patch.
   const commitDrag = useCallback(
     (id: string, patch: NodeUpdate) => {
-      onNodeUpdate?.(id, patch, currentCanvasRef)
+      let final = patch
+      if (snapToLanes) {
+        const cols = currentCanvas.columns
+        const rows = currentCanvas.rows
+        const nx = patch.x
+        const ny = patch.y
+        if (cols && cols.length > 0 && nx != null) {
+          final = { ...final, x: Math.round(snapToLane(nx, cols)) }
+        }
+        if (rows && rows.length > 0 && ny != null) {
+          final = { ...final, y: Math.round(snapToLane(ny, rows)) }
+        }
+      }
+      onNodeUpdate?.(id, final, currentCanvasRef)
     },
-    [onNodeUpdate, currentCanvasRef]
+    [onNodeUpdate, currentCanvasRef, snapToLanes, currentCanvas.columns, currentCanvas.rows]
   )
 
   const { dragOverrides, onPointerDown: onNodePointerDown } = useNodeDrag({
@@ -324,6 +536,23 @@ export function SystemCanvas({
       viewport: viewportStateRef,
       onCommit: commitDrag,
     })
+
+  // Selected node with live drag/resize overrides applied — used to position
+  // the floating node toolbar so it tracks the node as the user drags it.
+  const selectedResolvedNode = useMemo<ResolvedNode | null>(() => {
+    if (!selectedId) return null
+    const base = nodeMap.get(selectedId)
+    if (!base) return null
+    const resize = resizeOverrides.get(selectedId)
+    if (resize) {
+      return { ...base, x: resize.x, y: resize.y, width: resize.width, height: resize.height }
+    }
+    const drag = dragOverrides.get(selectedId)
+    if (drag) {
+      return { ...base, x: drag.x, y: drag.y }
+    }
+    return base
+  }, [selectedId, nodeMap, dragOverrides, resizeOverrides])
 
   // Proxy ref pointing at the SVG element exposed by the viewport handle.
   // Updated on every render so useEdgeCreate can convert client coords.
@@ -602,6 +831,7 @@ export function SystemCanvas({
 
   return (
     <div
+      ref={containerRef}
       className={`system-canvas ${className ?? ''}`}
       tabIndex={editable ? 0 : -1}
       onKeyDown={handleKeyDown}
@@ -651,6 +881,8 @@ export function SystemCanvas({
         nodeMap={nodeMap}
         theme={theme}
         edgeStyle={edgeStyle}
+        columns={currentCanvas.columns}
+        rows={currentCanvas.rows}
         minZoom={effectiveMinZoom}
         maxZoom={effectiveMaxZoom}
         defaultViewport={defaultViewport}
@@ -688,6 +920,38 @@ export function SystemCanvas({
         edgeCreateEnabled={editable}
       />
 
+      {/* Sticky lane headers overlay (above the viewport SVG) */}
+      {showLaneHeaders && (
+        <LaneHeaders
+          columns={currentCanvas.columns}
+          rows={currentCanvas.rows}
+          theme={theme}
+          getViewport={getViewportState}
+          width={containerSize.width}
+          height={containerSize.height}
+          pinned={laneHeaders === 'pinned'}
+        />
+      )}
+
+      {/* Floating node toolbar (above the selected node, editable mode only) */}
+      {editable && showNodeToolbar && selectedResolvedNode && !editingId && (
+        <NodeToolbar
+          node={selectedResolvedNode}
+          theme={theme}
+          onPatch={(update) => {
+            onNodeUpdate?.(selectedResolvedNode.id, update, currentCanvasRef)
+          }}
+          onDelete={() => {
+            onNodeDelete?.(selectedResolvedNode.id, currentCanvasRef)
+            setSelectedId(null)
+          }}
+          getViewport={getViewportState}
+          containerWidth={containerSize.width}
+          containerHeight={containerSize.height}
+          render={renderNodeToolbar}
+        />
+      )}
+
       {/* Add-node FAB (editable only) */}
       {editable &&
         (renderAddNodeButton
@@ -695,4 +959,5 @@ export function SystemCanvas({
           : <AddNodeButton {...renderProps} />)}
     </div>
   )
-}
+  }
+)

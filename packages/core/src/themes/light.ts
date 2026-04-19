@@ -58,6 +58,19 @@ export const lightTheme: CanvasTheme = {
     fontSize: 12,
   },
 
+  lanes: {
+    bandFillEven: 'rgba(148, 163, 184, 0.10)', // slate-400 soft
+    bandFillOdd: 'rgba(148, 163, 184, 0.03)',
+    dividerColor: 'rgba(148, 163, 184, 0.4)',
+    dividerWidth: 1,
+    headerBackground: 'rgba(255, 255, 255, 0.92)',
+    headerTextColor: '#334155',                 // slate-700
+    headerFontFamily: "'Inter', 'Helvetica Neue', sans-serif",
+    headerFontSize: 11,
+    headerSize: 28,
+    headerPadding: 10,
+  },
+
   presetColors: {
     '1': { fill: 'rgba(254, 226, 226, 0.7)', stroke: '#ef4444' },  // red
     '2': { fill: 'rgba(255, 237, 213, 0.7)', stroke: '#f97316' },  // orange

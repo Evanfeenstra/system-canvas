@@ -1,6 +1,6 @@
 # Plan: Fully Editable Canvas (Add / Edit / Move / Delete Nodes)
 
-Status: DRAFT v2 — review before implementing.
+Status: IMPLEMENTED
 
 ## Goal
 
@@ -41,12 +41,12 @@ The FAB is rendered by default but fully replaceable via a render prop.
 
 ## Click / double-click behavior
 
-| State          | Navigable (has `ref`) | Non-navigable |
-|----------------|-----------------------|---------------|
-| editable=false, single click | navigate             | fire `onNodeClick` |
-| editable=false, double click | fire `onNodeDoubleClick` | fire `onNodeDoubleClick` |
-| editable=true,  single click | select + `onNodeClick` | select + `onNodeClick` |
-| editable=true,  double click | `onNodeDoubleClick` then navigate | `onNodeDoubleClick` then open editor |
+| State                        | Navigable (has `ref`)             | Non-navigable                        |
+| ---------------------------- | --------------------------------- | ------------------------------------ |
+| editable=false, single click | navigate                          | fire `onNodeClick`                   |
+| editable=false, double click | fire `onNodeDoubleClick`          | fire `onNodeDoubleClick`             |
+| editable=true, single click  | select + `onNodeClick`            | select + `onNodeClick`               |
+| editable=true, double click  | `onNodeDoubleClick` then navigate | `onNodeDoubleClick` then open editor |
 
 In editable mode, single click never navigates. This is a deliberate behavior change. Consumers who want navigation without editing should leave `editable` off.
 
@@ -59,6 +59,7 @@ In editable mode, single click never navigates. This is a deliberate behavior ch
 ### Fix
 
 Refactor `useNavigation` to:
+
 - Track a breadcrumb stack of `{ label, ref?: string }` only.
 - Compute `currentCanvas` each render:
   - depth 0 → `rootCanvas` prop
@@ -78,7 +79,7 @@ A category currently does not specify a JSON Canvas node type. Add an optional f
 interface CategoryDefinition {
   // ... existing fields ...
   /** The JSON Canvas node type to create when this category is chosen. Default: 'text'. */
-  type?: NodeType
+  type?: NodeType;
 }
 ```
 
@@ -95,19 +96,19 @@ When the user picks category "service" from the menu, the new node gets `type: c
 
 ```ts
 /** A partial update to an existing node (x/y/text/label/etc.). */
-export type NodeUpdate = Partial<Omit<CanvasNode, 'id' | 'type'>>
+export type NodeUpdate = Partial<Omit<CanvasNode, "id" | "type">>;
 
 /** An entry in the add-node menu. */
 export interface NodeMenuOption {
-  kind: 'category' | 'type'
+  kind: "category" | "type";
   /** For kind='category': the category key. For kind='type': the NodeType. */
-  value: string
-  label: string
-  icon?: string | null
-  fill?: string
-  stroke?: string
+  value: string;
+  label: string;
+  icon?: string | null;
+  fill?: string;
+  stroke?: string;
   /** The resolved NodeType for this option (matches category.type or the base type). */
-  nodeType: NodeType
+  nodeType: NodeType;
 }
 ```
 
@@ -116,30 +117,30 @@ export interface NodeMenuOption {
 Add helpers (all pure):
 
 ```ts
-export function generateNodeId(): string
+export function generateNodeId(): string;
 
 export function getNodeMenuOptions(
   canvas: CanvasData,
-  theme: CanvasTheme
-): NodeMenuOption[]
+  theme: CanvasTheme,
+): NodeMenuOption[];
 
 export function createNodeFromOption(
   option: NodeMenuOption,
   x: number,
   y: number,
-  id?: string
-): CanvasNode
+  id?: string,
+): CanvasNode;
 
-export function addNode(canvas: CanvasData, node: CanvasNode): CanvasData
+export function addNode(canvas: CanvasData, node: CanvasNode): CanvasData;
 
 export function updateNode(
   canvas: CanvasData,
   nodeId: string,
-  patch: NodeUpdate
-): CanvasData
+  patch: NodeUpdate,
+): CanvasData;
 
 /** Remove a node AND any edges that reference it. */
-export function removeNode(canvas: CanvasData, nodeId: string): CanvasData
+export function removeNode(canvas: CanvasData, nodeId: string): CanvasData;
 ```
 
 `generateNodeId` uses `crypto.randomUUID()` when available, else a random base36 string.
@@ -174,11 +175,13 @@ See refactor above. Consumers of the hook directly (if any) get `currentCanvasRe
 ### `packages/react/src/components/AddNodeButton.tsx` (new)
 
 Default FAB (bottom-right), styled like breadcrumbs. Click opens a popover:
+
 - "Categories" section: one item per merged category (theme + canvas-level), with color swatch and icon. Uses `getNodeMenuOptions`.
 - Divider.
 - "Basic" section: text, file, link, group.
 
 Clicking an option calls `addNode(option)` which:
+
 1. Computes viewport center in canvas-space (uses `svgRef.getBoundingClientRect()` + current `ViewportState` via `screenToCanvas`).
 2. Applies a small cascade offset for rapid successive adds within ~1.5s (+20, +20 each).
 3. Calls `createNodeFromOption(option, x, y)`.
@@ -188,9 +191,12 @@ Render-prop API:
 
 ```ts
 interface AddNodeButtonRenderProps {
-  options: NodeMenuOption[]
-  addNode: (option: NodeMenuOption, position?: { x: number; y: number }) => void
-  theme: CanvasTheme
+  options: NodeMenuOption[];
+  addNode: (
+    option: NodeMenuOption,
+    position?: { x: number; y: number },
+  ) => void;
+  theme: CanvasTheme;
 }
 ```
 
@@ -218,6 +224,7 @@ Inline editor in a `<foreignObject>` positioned over the node.
 - `type='group'` → `<input>` editing `node.label`.
 
 Behavior:
+
 - Opens on double-click when `editable`.
 - Commits on blur or `Enter` (Shift+Enter inserts newline in textarea).
 - Cancels on `Escape`.
@@ -233,6 +240,7 @@ Behavior:
 ### `packages/react/src/components/{Text,File,Link,Group}Node.tsx`
 
 Each accepts:
+
 - `isSelected?: boolean` — when true, render a thin outline using `theme.node.labelColor` at low opacity outside the existing stroke.
 - `isEditing?: boolean` — when true, hide the label text(s); editor covers it.
 - `onPointerDown?: (node, event) => void` — for drag.
@@ -242,6 +250,7 @@ Z-order for new nodes: appended at end of `canvas.nodes`. Groups are filtered fi
 ### `packages/react/src/hooks/useCanvasInteraction.ts`
 
 No new state (selection lives in `SystemCanvas`). Changes:
+
 - Accept `editable`, `selectedId`, `setSelectedId`, `editingId`, `setEditingId`, `onNavigableNodeClick`.
 - `handleNodeClick` in editable mode: `setSelectedId(node.id)`, fire `onNodeClick`. Skip navigation.
 - `handleNodeClick` in non-editable mode: unchanged (navigate if `isNavigable`).
@@ -251,6 +260,7 @@ No new state (selection lives in `SystemCanvas`). Changes:
 ### `packages/react/src/index.ts`
 
 Export:
+
 - `AddNodeButton` component.
 - `useNodeDrag` hook.
 - New types: `NodeMenuOption`, `NodeUpdate`, `AddNodeButtonRenderProps` (re-exported from core where applicable).
@@ -290,6 +300,7 @@ Export:
 ## Verification
 
 No unit tests in this repo. Verification via:
+
 - `npm run typecheck` — must pass.
 - `npm run build` — must succeed.
 - `npm run dev` — manual smoke test in the demo:

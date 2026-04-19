@@ -58,6 +58,19 @@ export const warmTheme: CanvasTheme = {
     fontSize: 12,
   },
 
+  lanes: {
+    bandFillEven: 'rgba(42, 37, 32, 0.55)',
+    bandFillOdd: 'rgba(42, 37, 32, 0.2)',
+    dividerColor: 'rgba(107, 94, 74, 0.45)',
+    dividerWidth: 1,
+    headerBackground: 'rgba(26, 23, 20, 0.92)',
+    headerTextColor: '#e8ddd0',
+    headerFontFamily: "'IBM Plex Mono', monospace",
+    headerFontSize: 11,
+    headerSize: 28,
+    headerPadding: 10,
+  },
+
   presetColors: {
     '1': { fill: 'rgba(160, 60, 50, 0.3)',   stroke: '#c77e6a' },  // terracotta
     '2': { fill: 'rgba(180, 120, 50, 0.3)',  stroke: '#d4a060' },  // amber/honey

@@ -58,6 +58,19 @@ export const blueprintTheme: CanvasTheme = {
     fontSize: 11,
   },
 
+  lanes: {
+    bandFillEven: 'rgba(19, 34, 68, 0.45)',
+    bandFillOdd: 'rgba(19, 34, 68, 0.15)',
+    dividerColor: 'rgba(74, 144, 217, 0.35)',
+    dividerWidth: 1,
+    headerBackground: 'rgba(10, 22, 40, 0.92)',
+    headerTextColor: '#d4e5f7',
+    headerFontFamily: "'JetBrains Mono', monospace",
+    headerFontSize: 11,
+    headerSize: 28,
+    headerPadding: 10,
+  },
+
   presetColors: {
     '1': { fill: 'rgba(180, 60, 60, 0.25)',   stroke: '#e07070' },  // blueprint red
     '2': { fill: 'rgba(200, 130, 50, 0.25)',  stroke: '#d4a050' },  // blueprint orange
