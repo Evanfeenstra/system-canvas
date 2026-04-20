@@ -50,7 +50,8 @@ const TAB_BADGE_OVERHANG = 8
  */
 export function computeCategorySlotRegions(
   node: ResolvedNode,
-  theme: CanvasTheme
+  theme: CanvasTheme,
+  slots?: CategorySlots
 ): Record<SlotPosition, SlotRect> {
   const { x, y, width, height } = node
   const fs = theme.node.fontSize
@@ -62,6 +63,16 @@ export function computeCategorySlotRegions(
     BOTTOM_EDGE_MIN_PX,
     Math.round(height * BOTTOM_EDGE_HEIGHT_RATIO)
   )
+  // Body region is the reflow-aware content rect: the full node box minus
+  // any header/footer/edge reservations contributed by other slots. We
+  // compute this from `slots` if provided, otherwise default to the full
+  // content area minus standard padding. The body region never shrinks to
+  // accommodate itself — only sibling slots influence it.
+  const bodyReservations = computeBodyReservations(node, theme, slots)
+  const bodyX = x + bodyReservations.left
+  const bodyY = y + bodyReservations.top
+  const bodyWidth = Math.max(0, width - bodyReservations.left - bodyReservations.right)
+  const bodyHeight = Math.max(0, height - bodyReservations.top - bodyReservations.bottom)
   // Edge regions span the full edge of the node. The `CategorySlotsLayer`
   // wraps edge-slot output in a clipPath that matches the node's rounded
   // rect, so solid fills and progress bars bleed naturally under the
@@ -149,6 +160,43 @@ export function computeCategorySlotRegions(
       width: Math.max(0, width - HEADER_INSET_X * 2),
       height: footer,
     },
+    body: {
+      x: bodyX,
+      y: bodyY,
+      width: bodyWidth,
+      height: bodyHeight,
+    },
+  }
+}
+
+/**
+ * Reservations used to compute the `body` region. Mirrors
+ * `computeReflowReservations` but excludes the body slot itself from
+ * triggering the dashboard padding — the body owns the reflowed area
+ * regardless of whether decorative slots are present.
+ */
+function computeBodyReservations(
+  node: ResolvedNode,
+  theme: CanvasTheme,
+  slots: CategorySlots | undefined
+): ReflowReservations {
+  // Fall back to standard content padding when there are no slots.
+  if (!slots) {
+    return {
+      top: HEADER_INSET_Y,
+      bottom: FOOTER_INSET_Y,
+      left: HEADER_INSET_X,
+      right: HEADER_INSET_X,
+    }
+  }
+  const r = computeReflowReservationsInternal(node, theme, slots)
+  // Always apply standard body padding so the body slot aligns with
+  // header/footer insets even when no other slots are present.
+  return {
+    top: Math.max(r.top, HEADER_INSET_Y),
+    bottom: Math.max(r.bottom, FOOTER_INSET_Y),
+    left: Math.max(r.left, HEADER_INSET_X),
+    right: Math.max(r.right, HEADER_INSET_X),
   }
 }
 
@@ -258,6 +306,7 @@ export function slotEntries(
     'rightEdge',
     'header',
     'footer',
+    'body',
     'bodyTop',
     'topLeft',
     'topRight',
@@ -305,9 +354,24 @@ export function computeReflowReservations(
   theme: CanvasTheme,
   slots: CategorySlots | undefined
 ): ReflowReservations {
-  const zero = { top: 0, bottom: 0, left: 0, right: 0 }
-  if (!slots) return zero
+  return computeReflowReservationsInternal(node, theme, slots)
+}
 
+/**
+ * Shared reservation computation used by `computeReflowReservations` (for
+ * text/icon reflow) and by body-region geometry. Kept private so the
+ * public API surface stays small.
+ */
+function computeReflowReservationsInternal(
+  node: ResolvedNode,
+  theme: CanvasTheme,
+  slots: CategorySlots | undefined
+): ReflowReservations {
+  if (!slots) return { top: 0, bottom: 0, left: 0, right: 0 }
+
+  // Compute header/footer/edge base regions without the body inset. We
+  // deliberately pass `undefined` so this recursive call doesn't re-enter
+  // the body-region logic (which itself calls this function).
   const regions = computeCategorySlotRegions(node, theme)
   let top = 0
   let bottom = 0

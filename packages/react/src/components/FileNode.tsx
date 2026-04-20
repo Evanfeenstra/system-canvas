@@ -133,8 +133,9 @@ export function FileNode({
         opacity={0.5}
       />
 
-      {/* Clipped text group */}
-      {!isEditing && (
+      {/* Clipped text group — suppressed when a `body` slot owns the main
+          content area. */}
+      {!isEditing && !slots?.body && (
       <g clipPath={`url(#${clipId})`}>
         {/* Directory path (small, above filename) */}
         {dirPath && (

@@ -49,8 +49,8 @@ export function CategorySlotsLayer({
 }: CategorySlotsLayerProps) {
   const slots = slotsProp ?? getCategorySlots(node, theme)
   const regions = useMemo(
-    () => computeCategorySlotRegions(node, theme),
-    [node, theme]
+    () => computeCategorySlotRegions(node, theme, slots),
+    [node, theme, slots]
   )
   // Stable, render-scoped id for the edge clipPath so multiple nodes on
   // the same canvas don't collide on `#clip-edge`.
@@ -218,12 +218,42 @@ function renderSlot(
     }
     case 'text': {
       const value = resolveAccessor(spec.value, ctx)
-      const color = resolveAccessorOr(spec.color, theme.node.sublabelColor, ctx)
-      const align: 'start' | 'center' | 'end' =
-        position === 'header' || position === 'footer' ? 'start' : 'center'
+      const color = resolveAccessorOr(
+        spec.color,
+        position === 'body' ? theme.node.labelColor : theme.node.sublabelColor,
+        ctx
+      )
+      // Position-aware alignment default — headers/footers left-align,
+      // body left-aligns (title-style), everything else centers.
+      const defaultAlign: 'start' | 'center' | 'end' =
+        position === 'header' || position === 'footer' || position === 'body'
+          ? 'start'
+          : 'center'
+      const align: 'start' | 'center' | 'end' = spec.align ?? defaultAlign
       // Headers read as kickers — uppercase, letter-spaced, bolder,
-      // rendered in the label font.
+      // rendered in the label font. Body text reads as a title / figure —
+      // label-font, bolder, not uppercase. Callers can override any of
+      // these via explicit TextSlot fields.
       const isHeader = position === 'header'
+      const isBody = position === 'body'
+      const defaultWeight = isHeader ? 700 : isBody ? 600 : 500
+      const defaultUppercase = isHeader
+      const defaultUseLabelFont = isHeader || isBody
+      const defaultFontSize = isBody
+        ? Math.round(theme.node.fontSize * 1.35)
+        : undefined
+      const fontSize =
+        spec.fontSize !== undefined
+          ? resolveAccessor(spec.fontSize, ctx)
+          : defaultFontSize
+      const fontWeight =
+        spec.fontWeight !== undefined
+          ? resolveAccessor(spec.fontWeight, ctx)
+          : defaultWeight
+      const fontFamily =
+        spec.fontFamily !== undefined
+          ? resolveAccessor(spec.fontFamily, ctx)
+          : undefined
       return (
         <NodeText
           region={region}
@@ -231,9 +261,11 @@ function renderSlot(
           theme={theme}
           color={color}
           align={align}
-          fontWeight={isHeader ? 700 : 500}
-          uppercase={isHeader}
-          useLabelFont={isHeader}
+          fontWeight={fontWeight}
+          uppercase={spec.uppercase ?? defaultUppercase}
+          useLabelFont={spec.useLabelFont ?? defaultUseLabelFont}
+          fontFamily={fontFamily}
+          fontSize={fontSize}
         />
       )
     }

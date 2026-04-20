@@ -79,8 +79,8 @@ export function GroupNode({
         strokeDasharray={theme.group.strokeDasharray}
       />
 
-      {/* Label in top-left */}
-      {!isEditing && node.label && (
+      {/* Label in top-left — suppressed when a `body` slot owns the content. */}
+      {!isEditing && !slots?.body && node.label && (
         <text
           x={labelX}
           y={labelY}

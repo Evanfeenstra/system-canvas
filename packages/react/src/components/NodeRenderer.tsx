@@ -126,31 +126,28 @@ export function NodeRenderer({
           node={selectedNode!}
           theme={theme}
           onHandlePointerDown={onResizeHandlePointerDown!}
-          occupiedCorners={occupiedResizeCorners(
-            getCategorySlots(selectedNode!, theme)
-          )}
         />
       )}
+
+      {/* Re-paint the selected node's `topRightOuter` tab badge on top of
+          the resize handles so the badge (e.g. a blocker count) isn't
+          obscured by the NE resize handle. The handles still sit above
+          everything else on the node. */}
+      {renderResizeHandles &&
+        (() => {
+          const slots = getCategorySlots(selectedNode!, theme)
+          if (!slots?.topRightOuter) return null
+          return (
+            <CategorySlotsLayer
+              node={selectedNode!}
+              theme={theme}
+              canvases={canvases}
+              slots={{ topRightOuter: slots.topRightOuter }}
+            />
+          )
+        })()}
     </>
   )
-}
-
-/**
- * Map the category-slot positions that visually occupy a node corner to
- * the corresponding resize-handle corner names. Lets `ResizeHandles`
- * push handles inward at occupied corners so they don't overlap a
- * `topRightOuter` tab badge, a corner dot / pill, etc.
- */
-function occupiedResizeCorners(
-  slots: ReturnType<typeof getCategorySlots>
-): ReadonlySet<ResizeCorner> {
-  const occupied = new Set<ResizeCorner>()
-  if (!slots) return occupied
-  if (slots.topLeft) occupied.add('nw')
-  if (slots.topRight || slots.topRightOuter) occupied.add('ne')
-  if (slots.bottomLeft) occupied.add('sw')
-  if (slots.bottomRight) occupied.add('se')
-  return occupied
 }
 
 function getNodeComponent(type: string) {

@@ -63,6 +63,9 @@ export function TextNode({
   const lines = text.split('\n').filter(Boolean)
   const mainLabel = lines[0] ?? node.id
   const sublabel = lines[1]
+  // When the category declares a `body` slot, it owns the main content
+  // area — suppress the default label so the two don't stack.
+  const hasBodySlot = slots?.body !== undefined
 
   // Label layout: when the node has a header slot (reservedTop > 0), the
   // label aligns top-left under the header — dashboard-card style. When
@@ -112,8 +115,8 @@ export function TextNode({
         strokeWidth={theme.node.strokeWidth}
       />
 
-      {/* Label */}
-      {!isEditing && (
+      {/* Label — suppressed when a `body` slot owns the main content area. */}
+      {!isEditing && !hasBodySlot && (
         <text
           x={labelX}
           y={textStartY}
@@ -129,7 +132,7 @@ export function TextNode({
       )}
 
       {/* Sublabel */}
-      {!isEditing && sublabel && (
+      {!isEditing && !hasBodySlot && sublabel && (
         <text
           x={labelX}
           y={textStartY + lineHeight}

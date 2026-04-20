@@ -92,8 +92,8 @@ export function LinkNode({
         strokeWidth={theme.node.strokeWidth}
       />
 
-      {/* Link icon */}
-      {!isEditing && (
+      {/* Link icon — suppressed when a `body` slot owns the content area. */}
+      {!isEditing && !slots?.body && (
         <text
           x={contentX + 12}
           y={contentY + contentHeight / 2 + 4}
@@ -107,8 +107,8 @@ export function LinkNode({
         </text>
       )}
 
-      {/* URL display */}
-      {!isEditing && (
+      {/* URL display — suppressed when a `body` slot owns the content area. */}
+      {!isEditing && !slots?.body && (
         <text
           x={cx}
           y={contentY + contentHeight / 2 + 4}

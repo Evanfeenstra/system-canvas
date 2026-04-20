@@ -182,6 +182,9 @@ export interface CategoryDefinition {
  *     corner badges, inset from the corner.
  *   - `header`, `footer` — full-width inset strips inside the top / bottom
  *     of the node. Cause text to reflow.
+ *   - `body` — the main content area (same rect the default label would
+ *     occupy, minus header/footer/edge reservations). When present, the
+ *     default label is suppressed and the category owns body rendering.
  */
 export type SlotPosition =
   | 'topEdge'
@@ -201,6 +204,15 @@ export type SlotPosition =
    * divider strips, sparklines, etc. Does not reflow text.
    */
   | 'bodyTop'
+  /**
+   * The node's main content area — the same rect that the default label
+   * would be drawn into, shrunk by any header/footer/edge reservations.
+   * When a category declares a `body` slot, the default label rendering
+   * is suppressed and the slot owns the main text area entirely. Use for
+   * big numeric figures (`$142k`), styled titles, or any main-body
+   * visual that can't be expressed through decorative slots alone.
+   */
+  | 'body'
   /**
    * Hangs off the top-right corner of the node, partially outside its
    * bounding box. Designed for notification-style tab badges (e.g. a
@@ -289,11 +301,34 @@ export interface CountSlot {
   hideWhenEmpty?: boolean
 }
 
-/** Small text label inside the region. */
+/**
+ * Text label inside the region. Sized as a small kicker by default, but
+ * can be enlarged via `fontSize` for use in a `body` slot (large headline
+ * figures like `$142k`) or styled independently per-position.
+ *
+ * `align` defaults to `start` for `header` / `footer` / `body`, `center`
+ * otherwise. `uppercase` / `useLabelFont` default to `true` for `header`
+ * (kicker styling) and `false` elsewhere.
+ */
 export interface TextSlot {
   kind: 'text'
   value: NodeAccessor<string>
   color?: NodeAccessor<string>
+  /** Font size in px. When omitted, uses a position-appropriate default. */
+  fontSize?: NodeAccessor<number>
+  /** Font weight (100–900). Defaults by position. */
+  fontWeight?: NodeAccessor<number>
+  /** Horizontal alignment inside the region. */
+  align?: 'start' | 'center' | 'end'
+  /** Render uppercase with letter-spacing (kicker styling). */
+  uppercase?: boolean
+  /**
+   * Use the theme's `labelFont` (display font) rather than the body
+   * `fontFamily`. Useful for headline figures in a `body` slot.
+   */
+  useLabelFont?: boolean
+  /** Direct font-family override. Wins over `useLabelFont` when both set. */
+  fontFamily?: NodeAccessor<string>
 }
 
 /**

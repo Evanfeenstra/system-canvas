@@ -46,6 +46,16 @@ const ACCENT = {
   revenue: '#22c55e',
 }
 
+/**
+ * Blue → purple gradient painted across the vision title. Starts cooler
+ * (sky blue) on the left and resolves into the vision accent violet
+ * on the right.
+ */
+const VISION_GRADIENT = {
+  from: '#60a5fa', // sky-400
+  to: '#818cf8',   // indigo-400 — close to the blue so the shift reads as subtle
+}
+
 const LABEL_FONT =
   "'Inter', 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif"
 const MONO_FONT =
@@ -297,7 +307,11 @@ function renderTeamFooter(ctx: SlotContext): React.ReactNode {
 
 /**
  * Vision card — larger, with a purple "12-MONTH VISION" kicker and a
- * purple-tinted title.
+ * purple-tinted, slightly oversized, multi-line title body. The body is
+ * rendered via a `body` slot with `kind: 'custom'` because the title is
+ * multi-line (the built-in `kind: 'text'` is single-line). This
+ * demonstrates how the `body` slot lets a category take over main-text
+ * rendering entirely.
  */
 const visionCategory: any = {
   ...baseCard,
@@ -312,7 +326,65 @@ const visionCategory: any = {
       value: '12-MONTH VISION',
       color: ACCENT.vision,
     },
+    body: {
+      kind: 'custom',
+      render: (ctx: SlotContext) => renderVisionBody(ctx),
+    },
   },
+}
+
+/**
+ * Multi-line vision title with a blue→purple gradient painted across
+ * every line. Reads from `node.text` so the consumer still edits the
+ * title via the normal node-editor flow. The gradient is defined once
+ * per node (id derived from node.id) and referenced as the text fill.
+ */
+function renderVisionBody(ctx: SlotContext): React.ReactNode {
+  const { region, node, theme } = ctx
+  const raw = node.text ?? ''
+  const lines = raw.split('\n').filter(Boolean)
+  if (lines.length === 0) return null
+  const fs = Math.round(theme.node.fontSize * 1.35)
+  const lineHeight = fs + 4
+  const font = theme.node.labelFont ?? theme.node.fontFamily
+  const baseY = region.y + fs
+  const gradId = `sc-vision-grad-${node.id}`
+  return createElement(
+    'g',
+    { pointerEvents: 'none' },
+    createElement(
+      'defs',
+      null,
+      createElement(
+        'linearGradient',
+        {
+          id: gradId,
+          x1: '0',
+          y1: '0',
+          x2: '1',
+          y2: '0',
+        },
+        createElement('stop', { offset: '0%', stopColor: VISION_GRADIENT.from }),
+        createElement('stop', { offset: '100%', stopColor: VISION_GRADIENT.to })
+      )
+    ),
+    ...lines.map((line, i) =>
+      createElement(
+        'text',
+        {
+          key: i,
+          x: region.x,
+          y: baseY + i * lineHeight,
+          fill: `url(#${gradId})`,
+          fontSize: fs,
+          fontWeight: 600,
+          fontFamily: font,
+          pointerEvents: 'none',
+        },
+        line
+      )
+    )
+  )
 }
 
 /**
@@ -355,6 +427,9 @@ const customerCategory: any = {
 
 /**
  * Revenue card — REVENUE kicker, large $$$ figure, "+18% MoM" meta.
+ * The headline figure (`$142k`) uses a `body` slot with `kind: 'text'`
+ * so the category owns the main-content rendering: bigger than a normal
+ * label, label-font, bold, left-aligned under the header.
  */
 const revenueCategory: any = {
   ...baseCard,
@@ -363,6 +438,13 @@ const revenueCategory: any = {
   type: 'text' as const,
   slots: {
     header: { kind: 'text', value: 'REVENUE', color: ACCENT.revenue },
+    body: {
+      kind: 'text',
+      value: (ctx: SlotContext) => ctx.node.text ?? '',
+      fontSize: 26,
+      fontWeight: 700,
+      useLabelFont: true,
+    },
     footer: {
       kind: 'custom',
       render: (ctx: SlotContext) => {
