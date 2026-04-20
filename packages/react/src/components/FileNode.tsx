@@ -1,6 +1,13 @@
 import React from 'react'
-import type { ResolvedNode, CanvasTheme } from 'system-canvas'
+import type {
+  CanvasData,
+  CategorySlots,
+  ResolvedNode,
+  CanvasTheme,
+} from 'system-canvas'
 import { RefIndicator } from './RefIndicator.js'
+import { CategorySlotsLayer } from './CategorySlotsLayer.js'
+import { toKebabCorner, type RefCorner } from './refCorner.js'
 
 interface FileNodeProps {
   node: ResolvedNode
@@ -12,6 +19,13 @@ interface FileNodeProps {
   onPointerDown?: (node: ResolvedNode, event: React.PointerEvent) => void
   isSelected?: boolean
   isEditing?: boolean
+  slots?: CategorySlots
+  canvases?: Record<string, CanvasData>
+  reservedTop?: number
+  reservedBottom?: number
+  reservedLeft?: number
+  reservedRight?: number
+  refCorner?: RefCorner
 }
 
 /**
@@ -32,6 +46,13 @@ export function FileNode({
   onPointerDown,
   isSelected,
   isEditing,
+  slots,
+  canvases,
+  reservedTop = 0,
+  reservedBottom = 0,
+  reservedLeft = 0,
+  reservedRight = 0,
+  refCorner = 'bottomRight',
 }: FileNodeProps) {
   const { x, y, width, height } = node
 
@@ -45,8 +66,12 @@ export function FileNode({
 
   // Dog-ear size
   const fold = 10
-  const textPadding = 10
-  const maxTextWidth = width - textPadding * 2 - fold
+  const textPadding = 10 + reservedLeft
+  const maxTextWidth = width - textPadding - reservedRight - fold
+
+  // Content-box top/bottom for vertical text layout.
+  const contentY = y + reservedTop
+  const contentHeight = Math.max(0, height - reservedTop - reservedBottom)
 
   // File shape: rectangle with a folded corner (top-right)
   const shapePath = [
@@ -83,9 +108,9 @@ export function FileNode({
         <clipPath id={clipId}>
           <rect
             x={x + textPadding}
-            y={y}
+            y={contentY}
             width={maxTextWidth}
-            height={height}
+            height={contentHeight}
           />
         </clipPath>
       </defs>
@@ -115,7 +140,7 @@ export function FileNode({
         {dirPath && (
           <text
             x={x + textPadding}
-            y={y + 14}
+            y={contentY + 14}
             fill={theme.node.sublabelColor}
             fontSize={theme.node.sublabelFontSize - 1}
             fontFamily={theme.node.fontFamily}
@@ -129,7 +154,10 @@ export function FileNode({
         {/* Filename */}
         <text
           x={x + textPadding}
-          y={y + (dirPath ? 28 : height / 2 + (subpath ? -2 : 4))}
+          y={
+            contentY +
+            (dirPath ? 28 : contentHeight / 2 + (subpath ? -2 : 4))
+          }
           fill={theme.node.labelColor}
           fontSize={theme.node.fontSize - 1}
           fontWeight={500}
@@ -143,7 +171,10 @@ export function FileNode({
         {subpath && (
           <text
             x={x + textPadding}
-            y={y + (dirPath ? 40 : height / 2 + theme.node.fontSize + 2)}
+            y={
+              contentY +
+              (dirPath ? 40 : contentHeight / 2 + theme.node.fontSize + 2)
+            }
             fill={theme.node.sublabelColor}
             fontSize={theme.node.sublabelFontSize}
             fontFamily={theme.node.fontFamily}
@@ -155,7 +186,17 @@ export function FileNode({
       </g>
       )}
 
-      {/* Ref indicator — carved bottom-right corner */}
+      {/* Category slots */}
+      {slots && (
+        <CategorySlotsLayer
+          node={node}
+          theme={theme}
+          canvases={canvases}
+          slots={slots}
+        />
+      )}
+
+      {/* Ref indicator */}
       {node.isNavigable && (
         <RefIndicator
           node={node}
@@ -166,6 +207,7 @@ export function FileNode({
           nodeHeight={height}
           strokeColor={strokeColor}
           strokeWidth={thinStroke}
+          corner={toKebabCorner(refCorner)}
           onNavigate={onNavigate}
         />
       )}

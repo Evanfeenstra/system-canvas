@@ -1,6 +1,13 @@
 import React from 'react'
-import type { ResolvedNode, CanvasTheme } from 'system-canvas'
+import type {
+  CanvasData,
+  CategorySlots,
+  ResolvedNode,
+  CanvasTheme,
+} from 'system-canvas'
 import { RefIndicator } from './RefIndicator.js'
+import { CategorySlotsLayer } from './CategorySlotsLayer.js'
+import { toKebabCorner, type RefCorner } from './refCorner.js'
 
 interface GroupNodeProps {
   node: ResolvedNode
@@ -12,6 +19,13 @@ interface GroupNodeProps {
   onPointerDown?: (node: ResolvedNode, event: React.PointerEvent) => void
   isSelected?: boolean
   isEditing?: boolean
+  slots?: CategorySlots
+  canvases?: Record<string, CanvasData>
+  reservedTop?: number
+  reservedBottom?: number
+  reservedLeft?: number
+  reservedRight?: number
+  refCorner?: RefCorner
 }
 
 export function GroupNode({
@@ -24,12 +38,24 @@ export function GroupNode({
   onPointerDown,
   isSelected,
   isEditing,
+  slots,
+  canvases,
+  reservedTop = 0,
+  reservedBottom = 0,
+  reservedLeft = 0,
+  reservedRight = 0,
+  refCorner = 'topRight',
 }: GroupNodeProps) {
   const { x, y, width, height } = node
 
   // Use the node's resolved color for the group border, falling back to group theme
   const stroke = node.color ? node.resolvedStroke : theme.group.stroke
   const fill = node.color ? node.resolvedFill : theme.group.fill
+
+  // Label shifts down by reservedTop (from header slot) and right by
+  // reservedLeft (from a left-edge accent).
+  const labelX = x + 12 + reservedLeft
+  const labelY = y + reservedTop + theme.group.labelFontSize + 8
 
   return (
     <g
@@ -56,8 +82,8 @@ export function GroupNode({
       {/* Label in top-left */}
       {!isEditing && node.label && (
         <text
-          x={x + 12}
-          y={y + theme.group.labelFontSize + 8}
+          x={labelX}
+          y={labelY}
           fill={node.color ? stroke : theme.group.labelColor}
           fontSize={theme.group.labelFontSize}
           fontWeight={600}
@@ -68,7 +94,17 @@ export function GroupNode({
         </text>
       )}
 
-      {/* Ref indicator — carved top-right corner (label is top-left) */}
+      {/* Category slots */}
+      {slots && (
+        <CategorySlotsLayer
+          node={node}
+          theme={theme}
+          canvases={canvases}
+          slots={slots}
+        />
+      )}
+
+      {/* Ref indicator — corner chosen by NodeRenderer. */}
       {node.isNavigable && (
         <RefIndicator
           node={node}
@@ -79,7 +115,7 @@ export function GroupNode({
           nodeHeight={height}
           strokeColor={stroke}
           strokeWidth={theme.group.strokeWidth}
-          corner="top-right"
+          corner={toKebabCorner(refCorner)}
           onNavigate={onNavigate}
         />
       )}

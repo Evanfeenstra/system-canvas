@@ -124,6 +124,29 @@ const canvas = {
 
 Three to six categories is usually the sweet spot. Pick distinct hues so the diagram reads at a glance.
 
+### Category slots (optional, powerful)
+
+A category can declare `slots` -- small visual add-ons the library renders in fixed positions on every node of that category. Use them when a node has a piece of at-a-glance state worth showing without cluttering the label. Slot kinds: `color` (accent strip), `progress` (0..1 bar), `count` (badge), `text` (header/footer kicker), `dot`, or `custom` (your own SVG). Positions: `topEdge` / `bottomEdge` / `leftEdge` / `rightEdge`, four corners (`topLeft`/`topRight`/`bottomLeft`/`bottomRight`), or inset strips `header` / `footer`. One slot per position.
+
+Slot values can be static or a function of the node: `value: (ctx) => ctx.node.customData.progress`. If the node has a `ref`, `ctx.rollup(pred)` rolls up its sub-canvas so e.g. a parent service node can show "3/5 healthy" or a progress bar derived from children. Example:
+
+```js
+service: {
+  defaultWidth: 160, defaultHeight: 70,
+  fill: 'rgba(6,78,59,0.4)', stroke: '#34d399',
+  slots: {
+    header: { kind: 'text', value: 'SERVICE' },
+    bottomEdge: {
+      kind: 'progress',
+      value: ({ rollup }) => rollup(n => n.customData?.status === 'ok').fraction,
+      color: '#34d399',
+    },
+  },
+},
+```
+
+Skip slots for simple diagrams. Reach for them when the visual benefits from showing state, counts, progress, or status without reading the label.
+
 ## Nested sub-canvases: the killer feature
 
 This is what makes `system-canvas` better than Mermaid for explaining real systems. A node with a `ref` becomes navigable; provide a `canvases` map to supply the drill-down.

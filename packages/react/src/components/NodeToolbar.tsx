@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import type {
-  CanvasNode,
   CanvasTheme,
   NodeAction,
   NodeActionGroup,
@@ -11,7 +10,7 @@ import type {
 import {
   canvasToScreen,
   filterActionsForNode,
-  getNodeActions,
+  getNodeActionsForNode,
   resolveActionPatch,
 } from 'system-canvas'
 import { NodeIcon } from './NodeIcon.js'
@@ -202,7 +201,13 @@ function DefaultToolbarContent({
   onPatch,
   onDelete,
 }: DefaultToolbarContentProps) {
-  const groups = useMemo(() => getNodeActions(theme), [theme])
+  // Per-node resolver: category.toolbar wins when present, else the
+  // theme-level default. Memoized on both node and theme so switching a
+  // node's `category` via an action picks up the new toolbar immediately.
+  const groups = useMemo(
+    () => getNodeActionsForNode(node, theme),
+    [node, theme]
+  )
   const showDelete = !theme.hideToolbarDelete
 
   return (

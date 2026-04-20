@@ -1,0 +1,91 @@
+import React from 'react'
+import type { CanvasTheme, SlotRect } from 'system-canvas'
+
+interface NodeStatusPillProps {
+  region: SlotRect
+  /** Short label — rendered uppercase with letter-spacing. */
+  value: string
+  theme: CanvasTheme
+  /** Accent color — drives text color by default, and fill tint. */
+  color: string
+  /** Override text color. Defaults to `color`. */
+  textColor?: string
+  /**
+   * Override the fill. Defaults to `color` at ~15% alpha via `rgba`. If
+   * `color` isn't a `#hex` value the fill falls back to a translucent
+   * white wash.
+   */
+  fill?: string
+}
+
+/**
+ * Slim uppercase status tag — `OK` / `ATTN` / `RISK` style. Tiny rounded
+ * rect with a subtle tinted fill and colored text.
+ */
+export function NodeStatusPill({
+  region,
+  value,
+  theme,
+  color,
+  textColor,
+  fill,
+}: NodeStatusPillProps) {
+  const label = value.toUpperCase()
+  if (!label) return null
+
+  // Size the pill to the region height (typically 1em), grow width to fit
+  // the label. Keep it tight — this is a tag, not a button.
+  const h = Math.min(region.height, 18)
+  const fontSize = Math.max(9, h * 0.62)
+  const padX = 8
+  const w = Math.max(h * 1.6, label.length * fontSize * 0.62 + padX * 2)
+  // Pin to the region's right edge.
+  const x = region.x + region.width - w
+  const y = region.y + (region.height - h) / 2
+  const rx = h / 2
+  const cx = x + w / 2
+  const cy = y + h / 2
+
+  const tint = fill ?? toTint(color)
+  const fg = textColor ?? color
+
+  return (
+    <g pointerEvents="none">
+      <rect x={x} y={y} width={w} height={h} rx={rx} fill={tint} />
+      <text
+        x={cx}
+        y={cy + fontSize * 0.35}
+        fill={fg}
+        fontSize={fontSize}
+        fontWeight={700}
+        fontFamily={theme.node.fontFamily}
+        textAnchor="middle"
+        letterSpacing={0.6}
+      >
+        {label}
+      </text>
+    </g>
+  )
+}
+
+/** Convert a `#rrggbb` color to an ~15%-alpha rgba tint. */
+function toTint(color: string): string {
+  if (color.startsWith('#') && (color.length === 7 || color.length === 4)) {
+    let r: number
+    let g: number
+    let b: number
+    if (color.length === 7) {
+      r = parseInt(color.slice(1, 3), 16)
+      g = parseInt(color.slice(3, 5), 16)
+      b = parseInt(color.slice(5, 7), 16)
+    } else {
+      r = parseInt(color[1] + color[1], 16)
+      g = parseInt(color[2] + color[2], 16)
+      b = parseInt(color[3] + color[3], 16)
+    }
+    if (!Number.isNaN(r) && !Number.isNaN(g) && !Number.isNaN(b)) {
+      return `rgba(${r}, ${g}, ${b}, 0.15)`
+    }
+  }
+  return 'rgba(255, 255, 255, 0.08)'
+}

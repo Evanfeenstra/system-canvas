@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { SystemCanvas, type SystemCanvasHandle } from 'system-canvas-react'
 import {
@@ -28,6 +28,7 @@ import { roadmapRoot, roadmapCanvasMap } from './roadmap.js'
 import { kanbanRoot, kanbanCanvasMap, kanbanTheme } from './kanban.js'
 import { swimlaneRoot, swimlaneCanvasMap, swimlaneTheme } from './swimlane.js'
 import { nestedRoot, nestedCanvasMap } from './nested.js'
+import { showcaseRoot, showcaseCanvasMap, showcaseTheme } from './showcase.js'
 
 const allThemes: Record<string, CanvasTheme> = {
   dark: darkTheme,
@@ -38,11 +39,12 @@ const allThemes: Record<string, CanvasTheme> = {
   roadmap: roadmapTheme,
   kanban: kanbanTheme,
   swimlane: swimlaneTheme,
+  showcase: showcaseTheme,
 }
 
 const ROOT_KEY = '__root__'
 
-type Mode = 'system' | 'roadmap' | 'kanban' | 'swimlane' | 'nested'
+type Mode = 'system' | 'roadmap' | 'kanban' | 'swimlane' | 'nested' | 'showcase'
 
 // Which theme feels most natural for each mode. Consumers can still pick
 // anything from the theme dropdown, but switching modes flips to the
@@ -53,6 +55,7 @@ const DEFAULT_THEME_FOR_MODE: Record<Mode, string> = {
   kanban: 'kanban',
   swimlane: 'swimlane',
   nested: 'dark',
+  showcase: 'showcase',
 }
 
 // Whether each mode supports snap-to-lanes. Driven by whether the underlying
@@ -63,6 +66,7 @@ const MODE_HAS_LANES: Record<Mode, boolean> = {
   kanban: true,
   swimlane: true,
   nested: true, // sub-canvases have lanes even though the root doesn't
+  showcase: false,
 }
 
 // Root-label for breadcrumbs per mode.
@@ -72,6 +76,7 @@ const MODE_ROOT_LABEL: Record<Mode, string> = {
   kanban: 'Sprint board',
   swimlane: 'Release process',
   nested: 'Acme Co.',
+  showcase: 'Showcase',
 }
 
 // In "nested" mode we let per-canvas theme hints drive the theme instead
@@ -83,11 +88,22 @@ const MODE_USES_PER_CANVAS_THEME: Record<Mode, boolean> = {
   kanban: false,
   swimlane: false,
   nested: true,
+  showcase: false,
+}
+
+const MODES: Mode[] = ['system', 'roadmap', 'kanban', 'swimlane', 'nested', 'showcase']
+
+function readModeFromUrl(): Mode {
+  if (typeof window === 'undefined') return 'system'
+  const param = new URLSearchParams(window.location.search).get('mode')
+  return (MODES as string[]).includes(param ?? '') ? (param as Mode) : 'system'
 }
 
 function App() {
-  const [mode, setMode] = useState<Mode>('system')
-  const [themeName, setThemeName] = useState<string>('dark')
+  const [mode, setMode] = useState<Mode>(() => readModeFromUrl())
+  // Initial theme follows the mode read from the URL, so refreshing on
+  // ?mode=showcase lands with the showcase theme (same as clicking it).
+  const [themeName, setThemeName] = useState<string>(() => DEFAULT_THEME_FOR_MODE[readModeFromUrl()])
   const [edgeStyle, setEdgeStyle] = useState<'bezier' | 'straight' | 'orthogonal'>('bezier')
   const [editable, setEditable] = useState<boolean>(true)
   const [zoomNavigation, setZoomNavigation] = useState<boolean>(true)
@@ -141,6 +157,10 @@ function App() {
     [ROOT_KEY]: nestedRoot,
     ...nestedCanvasMap,
   }))
+  const [showcaseCanvases, setShowcaseCanvases] = useState<Record<string, CanvasData>>(() => ({
+    [ROOT_KEY]: showcaseRoot,
+    ...showcaseCanvasMap,
+  }))
 
   const canvasesByMode: Record<Mode, Record<string, CanvasData>> = {
     system: systemCanvases,
@@ -148,6 +168,7 @@ function App() {
     kanban: kanbanCanvases,
     swimlane: swimlaneCanvases,
     nested: nestedCanvases,
+    showcase: showcaseCanvases,
   }
   const allCanvases = canvasesByMode[mode]
 
@@ -174,10 +195,30 @@ function App() {
         case 'nested':
           setNestedCanvases(updater)
           break
+        case 'showcase':
+          setShowcaseCanvases(updater)
+          break
       }
     },
     []
   )
+
+  // Keep ?mode= in sync with state, so refreshes land on the same mode.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const url = new URL(window.location.href)
+    if (url.searchParams.get('mode') === mode) return
+    url.searchParams.set('mode', mode)
+    window.history.replaceState(null, '', url.toString())
+  }, [mode])
+
+  // Respond to browser back/forward so the URL remains authoritative.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const onPop = () => setMode(readModeFromUrl())
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
 
   // When switching modes, flip to the default theme for that mode — but
   // preserve the user's choice if they're already on a non-default theme.
@@ -323,6 +364,7 @@ function App() {
             <option value="kanban">kanban</option>
             <option value="swimlane">swimlane</option>
             <option value="nested">nested</option>
+            <option value="showcase">showcase</option>
           </select>
         </label>
         <label>

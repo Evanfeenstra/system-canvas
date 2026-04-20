@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import type { ResolvedNode, CanvasTheme } from 'system-canvas'
 
-type Corner = 'bottom-right' | 'top-right'
+type Corner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 
 interface RefIndicatorProps {
   node: ResolvedNode
@@ -59,8 +59,10 @@ export function RefIndicator({
   // visually echoes the box's rounding, but keep the arc noticeably tighter
   // than the node's own radius so the carve still reads as a distinct corner
   // rather than a soft scoop. Clamp to half the carve size so it always fits.
-  const nodeRadius =
-    corner === 'top-right' ? theme.group.cornerRadius : node.resolvedCornerRadius
+  const isTopCorner = corner === 'top-left' || corner === 'top-right'
+  const nodeRadius = isTopCorner
+    ? theme.group.cornerRadius
+    : node.resolvedCornerRadius
   const innerR = Math.max(0, Math.min(nodeRadius * 0.64, size / 2))
 
   let squareX: number
@@ -81,8 +83,7 @@ export function RefIndicator({
       `L ${squareX + innerR} ${squareY} ` +
       `A ${innerR} ${innerR} 0 0 0 ${squareX} ${squareY + innerR} ` +
       `L ${squareX} ${bottom}`
-  } else {
-    // top-right
+  } else if (corner === 'top-right') {
     squareX = right - size
     squareY = nodeY
     // Start at the left of the carve on the node's top edge, walk down
@@ -92,6 +93,29 @@ export function RefIndicator({
       `L ${squareX} ${squareY + size - innerR} ` +
       `A ${innerR} ${innerR} 0 0 0 ${squareX + innerR} ${squareY + size} ` +
       `L ${right} ${squareY + size}`
+  } else if (corner === 'bottom-left') {
+    squareX = nodeX
+    squareY = bottom - size
+    // Start at the bottom of the carve on the node's left edge, walk up
+    // along the right of the square to the arc, curve left, then walk
+    // left to the node's bottom edge.
+    carvePath =
+      `M ${squareX + size} ${bottom} ` +
+      `L ${squareX + size} ${squareY + innerR} ` +
+      `A ${innerR} ${innerR} 0 0 0 ${squareX + size - innerR} ${squareY} ` +
+      `L ${nodeX} ${squareY}`
+  } else {
+    // top-left
+    squareX = nodeX
+    squareY = nodeY
+    // Start at the right of the carve on the node's top edge, walk down
+    // the right edge of the square to the arc, curve left, then walk
+    // left to the node's left edge.
+    carvePath =
+      `M ${squareX + size} ${nodeY} ` +
+      `L ${squareX + size} ${squareY + size - innerR} ` +
+      `A ${innerR} ${innerR} 0 0 1 ${squareX + size - innerR} ${squareY + size} ` +
+      `L ${nodeX} ${squareY + size}`
   }
 
   const cx = squareX + size / 2
@@ -117,13 +141,30 @@ export function RefIndicator({
       `L ${squareX} ${squareY + innerR} ` +
       `A ${innerR} ${innerR} 0 0 1 ${squareX + innerR} ${squareY} ` +
       `Z`
-  } else {
+  } else if (corner === 'top-right') {
     hoverPath =
       `M ${squareX} ${nodeY} ` +
       `L ${right} ${nodeY} ` +
       `L ${right} ${squareY + size} ` +
       `L ${squareX + innerR} ${squareY + size} ` +
       `A ${innerR} ${innerR} 0 0 1 ${squareX} ${squareY + size - innerR} ` +
+      `Z`
+  } else if (corner === 'bottom-left') {
+    hoverPath =
+      `M ${nodeX} ${squareY} ` +
+      `L ${squareX + size - innerR} ${squareY} ` +
+      `A ${innerR} ${innerR} 0 0 1 ${squareX + size} ${squareY + innerR} ` +
+      `L ${squareX + size} ${bottom} ` +
+      `L ${nodeX} ${bottom} ` +
+      `Z`
+  } else {
+    // top-left
+    hoverPath =
+      `M ${nodeX} ${nodeY} ` +
+      `L ${squareX + size} ${nodeY} ` +
+      `L ${squareX + size} ${squareY + size - innerR} ` +
+      `A ${innerR} ${innerR} 0 0 1 ${squareX + size - innerR} ${squareY + size} ` +
+      `L ${nodeX} ${squareY + size} ` +
       `Z`
   }
 

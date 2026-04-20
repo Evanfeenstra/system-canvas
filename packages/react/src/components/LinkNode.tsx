@@ -1,6 +1,13 @@
 import React from 'react'
-import type { ResolvedNode, CanvasTheme } from 'system-canvas'
+import type {
+  CanvasData,
+  CategorySlots,
+  ResolvedNode,
+  CanvasTheme,
+} from 'system-canvas'
 import { RefIndicator } from './RefIndicator.js'
+import { CategorySlotsLayer } from './CategorySlotsLayer.js'
+import { toKebabCorner, type RefCorner } from './refCorner.js'
 
 interface LinkNodeProps {
   node: ResolvedNode
@@ -12,6 +19,13 @@ interface LinkNodeProps {
   onPointerDown?: (node: ResolvedNode, event: React.PointerEvent) => void
   isSelected?: boolean
   isEditing?: boolean
+  slots?: CategorySlots
+  canvases?: Record<string, CanvasData>
+  reservedTop?: number
+  reservedBottom?: number
+  reservedLeft?: number
+  reservedRight?: number
+  refCorner?: RefCorner
 }
 
 export function LinkNode({
@@ -24,9 +38,20 @@ export function LinkNode({
   onPointerDown,
   isSelected,
   isEditing,
+  slots,
+  canvases,
+  reservedTop = 0,
+  reservedBottom = 0,
+  reservedLeft = 0,
+  reservedRight = 0,
+  refCorner = 'bottomRight',
 }: LinkNodeProps) {
   const { x, y, width, height } = node
-  const cx = x + width / 2
+  const contentX = x + reservedLeft
+  const contentY = y + reservedTop
+  const contentWidth = Math.max(0, width - reservedLeft - reservedRight)
+  const contentHeight = Math.max(0, height - reservedTop - reservedBottom)
+  const cx = contentX + contentWidth / 2
 
   // Parse URL to show hostname
   let displayUrl = node.url ?? ''
@@ -70,8 +95,8 @@ export function LinkNode({
       {/* Link icon */}
       {!isEditing && (
         <text
-          x={x + 12}
-          y={y + height / 2 + 4}
+          x={contentX + 12}
+          y={contentY + contentHeight / 2 + 4}
           fill={node.resolvedStroke}
           fontSize={12}
           fontFamily={theme.node.fontFamily}
@@ -86,7 +111,7 @@ export function LinkNode({
       {!isEditing && (
         <text
           x={cx}
-          y={y + height / 2 + 4}
+          y={contentY + contentHeight / 2 + 4}
           fill={theme.node.labelColor}
           fontSize={theme.node.fontSize}
           fontWeight={600}
@@ -99,7 +124,17 @@ export function LinkNode({
         </text>
       )}
 
-      {/* Ref indicator — carved bottom-right corner */}
+      {/* Category slots */}
+      {slots && (
+        <CategorySlotsLayer
+          node={node}
+          theme={theme}
+          canvases={canvases}
+          slots={slots}
+        />
+      )}
+
+      {/* Ref indicator */}
       {node.isNavigable && (
         <RefIndicator
           node={node}
@@ -110,6 +145,7 @@ export function LinkNode({
           nodeHeight={height}
           strokeColor={node.resolvedStroke}
           strokeWidth={theme.node.strokeWidth}
+          corner={toKebabCorner(refCorner)}
           onNavigate={onNavigate}
         />
       )}

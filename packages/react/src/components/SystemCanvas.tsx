@@ -810,10 +810,16 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
         lastAddRef.current = { t: now, offset: nextOffset }
       }
 
-      const node = createNodeFromOption(option, Math.round(x), Math.round(y))
+      const node = createNodeFromOption(
+        option,
+        Math.round(x),
+        Math.round(y),
+        undefined,
+        theme
+      )
       onNodeAdd?.(node, currentCanvasRef)
     },
-    [onNodeAdd, currentCanvasRef]
+    [onNodeAdd, currentCanvasRef, theme]
   )
 
   // Keyboard: Delete/Backspace removes selected node/edge; Escape clears selection/editing
@@ -908,6 +914,7 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
         edgeStyle={edgeStyle}
         columns={currentCanvas.columns}
         rows={currentCanvas.rows}
+        canvases={canvases}
         minZoom={effectiveMinZoom}
         maxZoom={effectiveMaxZoom}
         defaultViewport={defaultViewport}

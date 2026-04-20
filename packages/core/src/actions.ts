@@ -67,3 +67,39 @@ export function filterActionsForNode(
 ): NodeAction[] {
   return group.actions.filter((a) => !a.appliesTo || a.appliesTo(node))
 }
+
+/**
+ * Resolve the effective toolbar action groups for a specific node.
+ *
+ * Precedence:
+ *   1. The node's category defines `toolbar` → use it (no merge).
+ *   2. Otherwise fall back to `getNodeActions(theme)`.
+ *
+ * This is the per-node version of `getNodeActions`, used by `NodeToolbar`
+ * so categories can own their toolbar alongside their visuals.
+ */
+export function getNodeActionsForNode(
+  node: CanvasNode,
+  theme: CanvasTheme
+): NodeActionGroup[] {
+  if (node.category) {
+    const def = theme.categories?.[node.category]
+    if (def?.toolbar && def.toolbar.length > 0) return def.toolbar
+  }
+  return getNodeActions(theme)
+}
+
+/**
+ * Build the default toolbar groups for a theme — the same value
+ * `getNodeActions` would return when no `nodeActions` is declared.
+ *
+ * Exposed so categories can spread the default into their own toolbar
+ * without duplicating the color-swatch construction:
+ *
+ * ```ts
+ * toolbar: [...buildDefaultToolbar(theme), { id: 'status', ... }]
+ * ```
+ */
+export function buildDefaultToolbar(theme: CanvasTheme): NodeActionGroup[] {
+  return theme.nodeActions ?? [buildDefaultColorActions(theme)]
+}

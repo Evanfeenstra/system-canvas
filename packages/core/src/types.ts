@@ -137,6 +137,258 @@ export interface CategoryDefinition {
    * the add-node menu. Defaults to 'text'.
    */
   type?: NodeType
+
+  /**
+   * Declarative visual add-ons rendered in library-owned positional regions
+   * on nodes of this category. See `SlotPosition` and `SlotSpec`.
+   */
+  slots?: CategorySlots
+
+  /**
+   * Per-category toolbar override. When present, fully replaces the theme's
+   * default `nodeActions` for nodes of this category (no merge). Use
+   * `buildDefaultToolbar(theme)` to spread the theme default explicitly.
+   */
+  toolbar?: NodeActionGroup[]
+
+  /**
+   * Per-category inline editor schema. When present, the node editor renders
+   * a multi-field form instead of the single-field text/input. Falls through
+   * to the single-field editor when absent.
+   */
+  editableFields?: EditableField[]
+
+  /**
+   * Seed `customData` for new nodes created from this category via the
+   * add-node menu. Deep-cloned per instance (via `structuredClone`) so two
+   * new nodes never share nested object/array references.
+   */
+  defaultCustomData?: Record<string, unknown>
+}
+
+// ---------------------------------------------------------------------------
+// Category slots — declarative visual add-ons rendered in library-owned
+// positional regions. Kind and position are orthogonal: every region accepts
+// every kind.
+// ---------------------------------------------------------------------------
+
+/**
+ * A library-owned positional region on a node. Each category slot maps to
+ * exactly one of these positions; each position holds at most one slot.
+ *
+ *   - `topEdge`, `bottomEdge`, `leftEdge`, `rightEdge` — thin strips along
+ *     the node's perimeter.
+ *   - `topLeft`, `topRight`, `bottomLeft`, `bottomRight` — small square
+ *     corner badges, inset from the corner.
+ *   - `header`, `footer` — full-width inset strips inside the top / bottom
+ *     of the node. Cause text to reflow.
+ */
+export type SlotPosition =
+  | 'topEdge'
+  | 'bottomEdge'
+  | 'leftEdge'
+  | 'rightEdge'
+  | 'topLeft'
+  | 'topRight'
+  | 'bottomLeft'
+  | 'bottomRight'
+  | 'header'
+  | 'footer'
+  /**
+   * A horizontal band sitting just below the header (or just below the
+   * top of the content box when no header is present). Sized like a
+   * single-line row — intended for inline progress bars under a title,
+   * divider strips, sparklines, etc. Does not reflow text.
+   */
+  | 'bodyTop'
+  /**
+   * Hangs off the top-right corner of the node, partially outside its
+   * bounding box. Designed for notification-style tab badges (e.g. a
+   * count that clips into the node's stroke). Lets a node carry both a
+   * `topRight` status pill AND a tab badge without collision.
+   */
+  | 'topRightOuter'
+
+export type CategorySlots = Partial<Record<SlotPosition, SlotSpec>>
+
+export type SlotSpec =
+  | ColorSlot
+  | ProgressSlot
+  | CountSlot
+  | TextSlot
+  | DotSlot
+  | PillSlot
+  | CustomSlot
+
+/**
+ * Flat color fill of the region.
+ *
+ * On edge-strip positions (`topEdge` / `bottomEdge` / `leftEdge` /
+ * `rightEdge`), defaults to a *short, pinned* strip that covers only part
+ * of the edge (~55%, pinned to start). Set `extent: 'full'` to force a
+ * full-width strip.
+ *
+ * `color` is optional — when omitted the slot inherits `node.resolvedStroke`,
+ * so it automatically follows toolbar color changes.
+ */
+export interface ColorSlot {
+  kind: 'color'
+  color?: NodeAccessor<string>
+  /**
+   * Edge-strip extent. `'short'` (default on edge positions) draws a
+   * ~55%-length strip pinned to the start (left/top). `'full'` draws a
+   * strip across the whole edge, from one rounded-corner tangent to the
+   * other. Ignored for non-edge positions.
+   */
+  extent?: 'short' | 'full'
+  /** Optional fractional length for `extent: 'short'`. Defaults to 0.55. */
+  length?: NodeAccessor<number>
+}
+
+/**
+ * Uppercase pill-style status tag — slim rounded rect with a tinted fill
+ * and colored text. Use for OK / ATTN / RISK tags, or any short badge
+ * label. Text is rendered uppercase with letter-spacing.
+ *
+ * `color` is optional — when omitted the pill inherits `node.resolvedStroke`.
+ */
+export interface PillSlot {
+  kind: 'pill'
+  value: NodeAccessor<string>
+  /** Accent color — drives both the subtle fill tint and the text color. */
+  color?: NodeAccessor<string>
+  /** Override the text color (defaults to `color`). */
+  textColor?: NodeAccessor<string>
+  /** Override the fill (defaults to `color` at ~15% alpha). */
+  fill?: NodeAccessor<string>
+}
+
+/**
+ * Horizontal progress bar. Value is clamped to 0..1.
+ *
+ * `color` is optional — defaults to `node.resolvedStroke`.
+ */
+export interface ProgressSlot {
+  kind: 'progress'
+  value: NodeAccessor<number>
+  color?: NodeAccessor<string>
+  bgColor?: NodeAccessor<string>
+}
+
+/**
+ * Count / badge. Renders a pill with a number or short string.
+ *
+ * `color` is optional — defaults to `node.resolvedStroke`.
+ */
+export interface CountSlot {
+  kind: 'count'
+  value: NodeAccessor<number | string>
+  color?: NodeAccessor<string>
+  textColor?: NodeAccessor<string>
+  /** When true (default), the badge is hidden when value resolves to 0 or ''. */
+  hideWhenEmpty?: boolean
+}
+
+/** Small text label inside the region. */
+export interface TextSlot {
+  kind: 'text'
+  value: NodeAccessor<string>
+  color?: NodeAccessor<string>
+}
+
+/**
+ * A small solid dot centered in the region (typically a corner).
+ *
+ * `color` is optional — defaults to `node.resolvedStroke`.
+ */
+export interface DotSlot {
+  kind: 'dot'
+  color?: NodeAccessor<string>
+}
+
+/**
+ * Escape hatch for arbitrary SVG inside the region. The library still owns
+ * positioning (the region `Rect` is provided via `ctx.region`), paint order,
+ * and ref-indicator collision.
+ */
+export interface CustomSlot {
+  kind: 'custom'
+  render: (ctx: SlotContext) => unknown
+}
+
+/** A value or a function that computes the value from a `SlotContext`. */
+export type NodeAccessor<T> = T | ((ctx: SlotContext) => T)
+
+/**
+ * Context passed to slot accessors and `custom` renderers. Scoped to one
+ * node instance and one region.
+ */
+export interface SlotContext {
+  node: ResolvedNode
+  theme: CanvasTheme
+  /** The region rect this slot is rendering into (canvas-space). */
+  region: SlotRect
+  /** Resolve a sub-canvas by ref (synchronous canvases map + async cache). */
+  getSubCanvas: (ref: string) => CanvasData | undefined
+  canvases?: Record<string, CanvasData>
+  /**
+   * Rollup scoped to this node's sub-canvas. Equivalent to
+   * `rollupNodes(getSubCanvas(node.ref), predicate)`. Returns zeros when
+   * the node has no ref or the sub-canvas is unresolved.
+   */
+  rollup: (predicate: (n: CanvasNode) => boolean) => RollupResult
+}
+
+/**
+ * Axis-aligned rectangle in canvas-space. Duplicated from `rendering/` so
+ * core's data-model module has no cross-package import cycles.
+ */
+export interface SlotRect {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+/**
+ * Result of rolling up descendant nodes against a predicate. Returned by
+ * `rollupNodes` / `rollupNodesDeep` and by `SlotContext.rollup`.
+ */
+export interface RollupResult {
+  /** Total nodes considered. */
+  total: number
+  /** Nodes matching the predicate. */
+  matched: number
+  /** `matched / total`, or 0 when `total === 0`. */
+  fraction: number
+}
+
+// ---------------------------------------------------------------------------
+// Editable fields — per-category form schema for the inline editor
+// ---------------------------------------------------------------------------
+
+export type EditableFieldKind =
+  | 'text'
+  | 'textarea'
+  | 'number'
+  | 'select'
+  | 'boolean'
+
+export interface EditableField {
+  /**
+   * Dot-path into the node. Top-level fields like `'text'`, `'label'`,
+   * `'file'`, `'url'`, or nested like `'customData.status'`.
+   */
+  path: string
+  kind: EditableFieldKind
+  label?: string
+  /** Options for `kind: 'select'`. */
+  options?: Array<{ value: string; label?: string }>
+  /** Numeric constraints for `kind: 'number'`. */
+  min?: number
+  max?: number
+  step?: number
+  placeholder?: string
 }
 
 export interface PresetColor {
@@ -170,7 +422,19 @@ export interface NodeTheme {
   cornerRadius: number
   labelColor: string
   sublabelColor: string
+  /**
+   * Primary font stack for monospace / data-style text (file paths,
+   * footer metrics, counts). Used by everything unless a specific
+   * consumer overrides it.
+   */
   fontFamily: string
+  /**
+   * Optional display-font stack for node titles and header kickers.
+   * Defaults to `fontFamily` so existing themes are unchanged. Swap in
+   * a sans-serif here for an app-style / dashboard look while keeping
+   * numbers and metrics monospaced.
+   */
+  labelFont?: string
   fontSize: number
   sublabelFontSize: number
   refIndicator: RefIndicatorConfig

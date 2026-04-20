@@ -32,6 +32,23 @@ export type {
   NodeMenuOption,
   NodeAction,
   NodeActionGroup,
+  // Category slots
+  SlotPosition,
+  CategorySlots,
+  SlotSpec,
+  ColorSlot,
+  ProgressSlot,
+  CountSlot,
+  TextSlot,
+  DotSlot,
+  PillSlot,
+  CustomSlot,
+  NodeAccessor,
+  SlotContext,
+  SlotRect,
+  RollupResult,
+  EditableField,
+  EditableFieldKind,
 } from './types.js'
 
 // Themes
@@ -70,8 +87,28 @@ export {
   resolveActionPatch,
   buildDefaultColorActions,
   getNodeActions,
+  getNodeActionsForNode,
+  buildDefaultToolbar,
   filterActionsForNode,
 } from './actions.js'
+
+// Rollup helpers
+export { rollupNodes, rollupNodesDeep } from './rollup.js'
+
+// Category-slot helpers
+export {
+  computeCategorySlotRegions,
+  resolveAccessor,
+  resolveAccessorOr,
+  getCategorySlots,
+  pickRefIndicatorCorner,
+  slotEntries,
+  computeReflowReservations,
+} from './slots.js'
+export type { ReflowReservations } from './slots.js'
+
+// Path utilities (for form editor field paths like 'customData.status')
+export { getAtPath, setAtPath } from './paths.js'
 
 // Canvas helpers
 export {
