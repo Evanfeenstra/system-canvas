@@ -41,7 +41,7 @@ const TAB_BADGE_EM = 1.4
 /** How far the tab badge floats above the node's top edge (in px). */
 const TAB_BADGE_LIFT = 10
 /** How far the tab badge extends past the node's right edge (in px). */
-const TAB_BADGE_OVERHANG = 6
+const TAB_BADGE_OVERHANG = 8
 
 /**
  * Compute the region rect (in canvas-space) for every slot position on a

@@ -10,9 +10,24 @@ interface ResizeHandlesProps {
     corner: ResizeCorner,
     event: React.PointerEvent
   ) => void
+  /**
+   * Corners that are visually occupied by category slots (e.g. a
+   * `topRightOuter` count badge at `ne`, or a `topLeft` dot at `nw`).
+   * Handles at these corners are nudged inward so they don't overlap
+   * the slot — the user can still grab them without the badge stealing
+   * the click.
+   */
+  occupiedCorners?: ReadonlySet<ResizeCorner>
 }
 
 const HANDLE_SIZE = 7
+/**
+ * How far to push a resize handle inward when its corner is occupied by
+ * a slot. Large enough to clear a `topRightOuter` tab badge (which hangs
+ * ~6px outside the node and ~16px tall) and a `topLeft` / `topRight`
+ * dot (which sits ~8px inside the corner).
+ */
+const OCCUPIED_CORNER_INSET = 18
 
 const CORNERS: { corner: ResizeCorner; cursor: string; anchor: 'nw' | 'ne' | 'sw' | 'se' }[] = [
   { corner: 'nw', cursor: 'nwse-resize', anchor: 'nw' },
@@ -45,15 +60,28 @@ const cornerInset = (cornerRadius: number) =>
  * Each handle sits at (or very near) the node's geometric corner: a small
  * radius-proportional inset keeps it visually attached to the outline on
  * larger rounded corners without pulling it noticeably toward the center.
+ * Handles at corners flagged as occupied by slots are pushed inward
+ * further so they don't collide with corner badges / dots / tab badges.
  */
-export function ResizeHandles({ node, theme, onHandlePointerDown }: ResizeHandlesProps) {
+export function ResizeHandles({
+  node,
+  theme,
+  onHandlePointerDown,
+  occupiedCorners,
+}: ResizeHandlesProps) {
   const { x, y, width, height } = node
   const [hoveredCorner, setHoveredCorner] = useState<ResizeCorner | null>(null)
 
   const handleColor = node.resolvedStroke ?? theme.node.labelColor
 
-  const i = cornerInset(node.resolvedCornerRadius)
-  const anchorPos = (anchor: 'nw' | 'ne' | 'sw' | 'se') => {
+  const baseInset = cornerInset(node.resolvedCornerRadius)
+  const insetFor = (corner: ResizeCorner): number =>
+    occupiedCorners?.has(corner) ? OCCUPIED_CORNER_INSET : baseInset
+  const anchorPos = (
+    anchor: 'nw' | 'ne' | 'sw' | 'se',
+    corner: ResizeCorner
+  ) => {
+    const i = insetFor(corner)
     switch (anchor) {
       case 'nw':
         return { cx: x + i, cy: y + i }
@@ -69,7 +97,7 @@ export function ResizeHandles({ node, theme, onHandlePointerDown }: ResizeHandle
   return (
     <g className="system-canvas-resize-handles" pointerEvents="all">
       {CORNERS.map(({ corner, cursor, anchor }) => {
-        const { cx, cy } = anchorPos(anchor)
+        const { cx, cy } = anchorPos(anchor, corner)
         const isHovered = hoveredCorner === corner
         const s = isHovered ? HANDLE_SIZE + 2 : HANDLE_SIZE
         const half = s / 2

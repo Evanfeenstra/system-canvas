@@ -126,10 +126,31 @@ export function NodeRenderer({
           node={selectedNode!}
           theme={theme}
           onHandlePointerDown={onResizeHandlePointerDown!}
+          occupiedCorners={occupiedResizeCorners(
+            getCategorySlots(selectedNode!, theme)
+          )}
         />
       )}
     </>
   )
+}
+
+/**
+ * Map the category-slot positions that visually occupy a node corner to
+ * the corresponding resize-handle corner names. Lets `ResizeHandles`
+ * push handles inward at occupied corners so they don't overlap a
+ * `topRightOuter` tab badge, a corner dot / pill, etc.
+ */
+function occupiedResizeCorners(
+  slots: ReturnType<typeof getCategorySlots>
+): ReadonlySet<ResizeCorner> {
+  const occupied = new Set<ResizeCorner>()
+  if (!slots) return occupied
+  if (slots.topLeft) occupied.add('nw')
+  if (slots.topRight || slots.topRightOuter) occupied.add('ne')
+  if (slots.bottomLeft) occupied.add('sw')
+  if (slots.bottomRight) occupied.add('se')
+  return occupied
 }
 
 function getNodeComponent(type: string) {
