@@ -28,7 +28,7 @@ import { darkTheme, resolveTheme } from 'system-canvas'
 // a visible silhouette.
 const BG = '#15171c'
 const SURFACE = 'rgba(255, 255, 255, 0.03)'
-const STROKE = 'rgba(255, 255, 255, 0.10)'
+const STROKE = '#363945'
 const TEXT = 'rgba(255, 255, 255, 0.92)'
 const MUTED = 'rgba(255, 255, 255, 0.45)'
 
