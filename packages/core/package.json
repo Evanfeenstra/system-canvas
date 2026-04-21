@@ -1,6 +1,6 @@
 {
   "name": "system-canvas",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Interactive, zoomable SVG diagrams from JSON Canvas documents. Pure TypeScript core with types, themes, edge routing, and viewport math.",
   "license": "MIT",
   "type": "module",
@@ -12,8 +12,18 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist"],
-  "keywords": ["canvas", "diagram", "svg", "json-canvas", "interactive", "zoomable", "system-diagram"],
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "canvas",
+    "diagram",
+    "svg",
+    "json-canvas",
+    "interactive",
+    "zoomable",
+    "system-diagram"
+  ],
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
