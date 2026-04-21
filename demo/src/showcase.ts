@@ -97,6 +97,43 @@ const baseCard = {
  *   - `footer` metrics — dim "38% 4 blockers" line (still custom, uses
  *     `ctx.node.resolvedStroke` so it tracks color too).
  */
+/**
+ * Canonical "color picker that's really a status switcher" — 3 swatches
+ * that patch `category` (not `color`), with `isActive` keyed on the
+ * category name. Clicking a swatch transforms the node's stroke, slots,
+ * and toolbar in one go because the new category owns all of that.
+ */
+const statusToolbar = [
+  {
+    id: 'status',
+    label: 'Status',
+    kind: 'swatches' as const,
+    actions: [
+      {
+        id: 'status-ok',
+        label: 'OK',
+        swatch: STATUS.ok,
+        patch: { category: 'status-ok' },
+        isActive: (n: CanvasNode) => n.category === 'status-ok',
+      },
+      {
+        id: 'status-attn',
+        label: 'Attention',
+        swatch: STATUS.attn,
+        patch: { category: 'status-attn' },
+        isActive: (n: CanvasNode) => n.category === 'status-attn',
+      },
+      {
+        id: 'status-risk',
+        label: 'Risk',
+        swatch: STATUS.risk,
+        patch: { category: 'status-risk' },
+        isActive: (n: CanvasNode) => n.category === 'status-risk',
+      },
+    ],
+  },
+]
+
 function statusCategory(
   status: 'ok' | 'attn' | 'risk',
   label: string
@@ -109,6 +146,7 @@ function statusCategory(
     defaultWidth: CARD_W,
     defaultHeight: CARD_H,
     type: 'text' as const,
+    toolbar: statusToolbar,
     slots: {
       topEdge: { kind: 'color', extent: 'full' },
       bodyTop: {
