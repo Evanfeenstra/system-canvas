@@ -28,6 +28,11 @@ export { LanesBackground } from './components/LanesBackground.js'
 export { LaneHeaders } from './components/LaneHeaders.js'
 export { ResizeHandles } from './components/ResizeHandles.js'
 
+// Primitives — low-level building blocks used internally by the slot
+// renderer and re-exported for `kind: 'custom'` slot implementations.
+// Also available via the `system-canvas-react/primitives` secondary entry.
+export * from './primitives/index.js'
+
 // Hooks
 export { useViewport } from './hooks/useViewport.js'
 export { useNavigation } from './hooks/useNavigation.js'

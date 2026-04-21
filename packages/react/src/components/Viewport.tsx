@@ -8,6 +8,7 @@ import React, {
   forwardRef,
 } from 'react'
 import type {
+  CanvasData,
   CanvasEdge,
   CanvasLane,
   ResolvedNode,
@@ -54,6 +55,12 @@ interface ViewportProps {
   edgeStyle: EdgeStyle
   columns?: CanvasLane[]
   rows?: CanvasLane[]
+  /**
+   * Synchronous canvases map. Forwarded to `NodeRenderer` so category slot
+   * accessors (`ctx.rollup`, `ctx.getSubCanvas`) can read descendant
+   * sub-canvases without async.
+   */
+  canvases?: Record<string, CanvasData>
   minZoom: number
   maxZoom: number
   defaultViewport?: ViewportState
@@ -147,6 +154,7 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
       edgeStyle,
       columns,
       rows,
+      canvases,
       minZoom,
       maxZoom,
       defaultViewport,
@@ -516,6 +524,7 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
             onPointerDown={onNodePointerDown}
             selectedId={selectedId}
             editingId={editingId}
+            canvases={canvases}
             only="groups"
           />
 
@@ -546,6 +555,7 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
             selectedId={selectedId}
             editingId={editingId}
             onResizeHandlePointerDown={onResizeHandlePointerDown}
+            canvases={canvases}
             only="non-groups"
           />
 

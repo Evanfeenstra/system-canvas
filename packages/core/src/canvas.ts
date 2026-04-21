@@ -12,6 +12,20 @@ import type {
 import { resolveNode } from './themes/resolve.js'
 
 /**
+ * Deep-clone a plain JSON-ish value. Prefers `structuredClone` (available
+ * in modern runtimes and Node 17+); falls back to JSON round-trip for
+ * environments that lack it. Used for per-instance cloning of a category's
+ * `defaultCustomData` so two new nodes can't share nested references.
+ */
+function deepClone<T>(value: T): T {
+  const g: any = globalThis as any
+  if (typeof g.structuredClone === 'function') {
+    return g.structuredClone(value)
+  }
+  return JSON.parse(JSON.stringify(value)) as T
+}
+
+/**
  * Resolve all nodes in a canvas, applying category defaults and color resolution.
  *
  * If the canvas includes a `theme` hint with inline categories, those are
@@ -180,7 +194,15 @@ export function createNodeFromOption(
   option: NodeMenuOption,
   x: number,
   y: number,
-  id: string = generateNodeId()
+  id: string = generateNodeId(),
+  /**
+   * Optional theme — when provided and the option is a category, the
+   * category's `defaultCustomData` is deep-cloned onto the new node so
+   * consumers don't have to wire this themselves. Deep cloning uses
+   * `structuredClone` when available so two new nodes never share nested
+   * references.
+   */
+  theme?: CanvasTheme
 ): CanvasNode {
   const base: CanvasNode = {
     id,
@@ -191,6 +213,10 @@ export function createNodeFromOption(
 
   if (option.kind === 'category') {
     base.category = option.value
+    const def = theme?.categories?.[option.value]
+    if (def?.defaultCustomData) {
+      base.customData = deepClone(def.defaultCustomData)
+    }
   }
 
   // Provide reasonable type-specific starter content / dimensions.

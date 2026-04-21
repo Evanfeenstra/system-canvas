@@ -46,12 +46,15 @@ const cornerInset = (cornerRadius: number) =>
  * radius-proportional inset keeps it visually attached to the outline on
  * larger rounded corners without pulling it noticeably toward the center.
  */
-export function ResizeHandles({ node, theme, onHandlePointerDown }: ResizeHandlesProps) {
+export function ResizeHandles({
+  node,
+  theme,
+  onHandlePointerDown,
+}: ResizeHandlesProps) {
   const { x, y, width, height } = node
   const [hoveredCorner, setHoveredCorner] = useState<ResizeCorner | null>(null)
 
   const handleColor = node.resolvedStroke ?? theme.node.labelColor
-
   const i = cornerInset(node.resolvedCornerRadius)
   const anchorPos = (anchor: 'nw' | 'ne' | 'sw' | 'se') => {
     switch (anchor) {
