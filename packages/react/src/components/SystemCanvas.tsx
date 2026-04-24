@@ -609,6 +609,16 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
         },
       }
       setParentFrames((prev) => [...prev, frame])
+      // Plain click-to-drill: navigate immediately and let the Viewport's
+      // auto-fit effect center the sub-canvas content. The cinematic
+      // zoom-into-parent animation + handoff is an opt-in via
+      // `zoomNavigation`; without it, the handoff transform is computed
+      // for the parent node's on-screen rect and has no relationship to
+      // where the sub-canvas content actually lives.
+      if (!zoomNavConfig.enabled) {
+        navigateToRef(node)
+        return
+      }
       const handle = viewportHandleRef.current
       if (handle) {
         handle.zoomToNode(node, () => {
@@ -623,7 +633,7 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
         navigateToRef(node)
       }
     },
-    [navigateToRef, currentCanvasRef]
+    [navigateToRef, currentCanvasRef, zoomNavConfig.enabled]
   )
 
   // --- Zoom-navigation enter/exit handlers ---
