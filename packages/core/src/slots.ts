@@ -102,18 +102,45 @@ export function computeCategorySlotRegions(
       width: RIGHT_EDGE_PX,
       height,
     },
-    bodyTop: {
-      // Horizontal band sitting below the title row. When a footer slot
-      // is present it floats ~halfway between the title and the footer;
-      // otherwise it sits below the title with similar breathing room.
-      // Used for inline progress bars, divider strips, sparklines, etc.
-      x: x + HEADER_INSET_X,
-      // title baseline sits at roughly `HEADER_INSET_Y + fs + 4`, so pad
-      // another ~fs to clear the descender before the bar.
-      y: y + HEADER_INSET_Y + fs + Math.round(fs * 0.9),
-      width: Math.max(0, width - HEADER_INSET_X * 2),
-      height: Math.max(4, Math.round(fs * 0.35)),
-    },
+    bodyTop: (() => {
+      // Horizontal band intended for inline progress bars, divider
+      // strips, sparklines, etc.
+      //
+      // Vertical placement depends on whether a `header` slot is
+      // declared on the same category:
+      //
+      //   - **With header** (dashboard pattern): the band sits
+      //     directly below the header strip with a small breathing
+      //     gap. Body content (title text) reflows BELOW the band —
+      //     `computeBodyReservations` accounts for this so wrapped
+      //     titles never collide.
+      //
+      //   - **Without header** (legacy status-card pattern): the
+      //     band floats one line of body text below the top edge,
+      //     overlapping the body region. Default label rendering
+      //     centers within the remaining body space, producing the
+      //     "title above, bar below" look the showcase expects.
+      //
+      // The header-present branch is the one users tend to want when
+      // they pair `header` + `bodyTop` on the same card; without it,
+      // a wrapped/multi-line body collides with the bar (the bug
+      // this branch fixes).
+      const hasHeader = slots?.header !== undefined
+      const bandHeight = Math.max(4, Math.round(fs * 0.35))
+      const bandY = hasHeader
+        ? // Just below the header strip. Header height is ~fs + 4
+          // and sits at HEADER_INSET_Y; pad another small gap so the
+          // bar reads as decoration rather than a divider line.
+          y + HEADER_INSET_Y + fs + 6
+        : // Legacy: under one line of body text.
+          y + HEADER_INSET_Y + fs + Math.round(fs * 0.9)
+      return {
+        x: x + HEADER_INSET_X,
+        y: bandY,
+        width: Math.max(0, width - HEADER_INSET_X * 2),
+        height: bandHeight,
+      }
+    })(),
     topRightOuter: {
       // Hangs off the top-right corner. The region extends past the
       // node's right edge so the badge reads as a notification tab
@@ -190,10 +217,32 @@ function computeBodyReservations(
     }
   }
   const r = computeReflowReservationsInternal(node, theme, slots)
+  let top = Math.max(r.top, HEADER_INSET_Y)
+
+  // When `bodyTop` is paired with a `header`, the band sits directly
+  // below the header strip (see `computeCategorySlotRegions`'s
+  // `bodyTop` branch). Reserve enough body-region top inset that
+  // body content (e.g. wrapped title text in a custom `body` slot)
+  // starts BELOW the band rather than colliding with it.
+  //
+  // We deliberately skip this reservation when there's no header: in
+  // that case `bodyTop` overlaps the body region by design, and the
+  // default label rendering centers within the remaining space (the
+  // showcase status-card pattern).
+  if (slots.bodyTop && slots.header) {
+    const fs = theme.node.fontSize
+    const bandHeight = Math.max(4, Math.round(fs * 0.35))
+    // Mirror the same geometry as `computeCategorySlotRegions`'s
+    // bodyTop branch: header-bottom (HEADER_INSET_Y + fs + 6) + band
+    // height + a small gap for breathing room before body text.
+    const bandBottomFromTop = HEADER_INSET_Y + fs + 6 + bandHeight + 6
+    top = Math.max(top, bandBottomFromTop)
+  }
+
   // Always apply standard body padding so the body slot aligns with
   // header/footer insets even when no other slots are present.
   return {
-    top: Math.max(r.top, HEADER_INSET_Y),
+    top,
     bottom: Math.max(r.bottom, FOOTER_INSET_Y),
     left: Math.max(r.left, HEADER_INSET_X),
     right: Math.max(r.right, HEADER_INSET_X),
