@@ -167,6 +167,13 @@ function renderSlot(
     }
     case 'progress': {
       const value = resolveAccessor(spec.value, ctx)
+      // `hideWhenZero` lets cards skip the empty track when there's no
+      // signal yet (e.g. a milestone with zero linked features). The
+      // empty track would otherwise read as "0% complete" rather than
+      // "no data."
+      if (spec.hideWhenZero && (!Number.isFinite(value) || value <= 0)) {
+        return null
+      }
       const color = resolveAccessorOr(spec.color, nodeColor, ctx)
       const bgColor = resolveAccessorOr(spec.bgColor, 'rgba(255,255,255,0.08)', ctx)
       return (
@@ -254,18 +261,31 @@ function renderSlot(
         spec.fontFamily !== undefined
           ? resolveAccessor(spec.fontFamily, ctx)
           : undefined
+      // Wrapping defaults: `body` text wraps by default (title pattern);
+      // every other position renders single-line. Honors `\n` either way.
+      const wrap = spec.wrap ?? isBody
+      const lineHeight =
+        spec.lineHeight !== undefined
+          ? resolveAccessor(spec.lineHeight, ctx)
+          : undefined
+      const fill =
+        spec.fill !== undefined ? resolveAccessor(spec.fill, ctx) : undefined
       return (
         <NodeText
           region={region}
           value={value}
           theme={theme}
           color={color}
+          fill={fill}
           align={align}
           fontWeight={fontWeight}
           uppercase={spec.uppercase ?? defaultUppercase}
           useLabelFont={spec.useLabelFont ?? defaultUseLabelFont}
           fontFamily={fontFamily}
           fontSize={fontSize}
+          wrap={wrap}
+          maxLines={spec.maxLines}
+          lineHeight={lineHeight}
         />
       )
     }

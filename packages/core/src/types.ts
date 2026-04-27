@@ -279,12 +279,18 @@ export interface PillSlot {
  * Horizontal progress bar. Value is clamped to 0..1.
  *
  * `color` is optional — defaults to `node.resolvedStroke`.
+ *
+ * `hideWhenZero`, when true, skips rendering the bar entirely (track and
+ * fill) when `value` resolves to 0. Useful for cards that should only
+ * show progress once a denominator exists — the empty track would
+ * otherwise read as "0% complete" rather than "no data yet."
  */
 export interface ProgressSlot {
   kind: 'progress'
   value: NodeAccessor<number>
   color?: NodeAccessor<string>
   bgColor?: NodeAccessor<string>
+  hideWhenZero?: boolean
 }
 
 /**
@@ -302,6 +308,20 @@ export interface CountSlot {
 }
 
 /**
+ * Linear-gradient fill spec for a `TextSlot`. When set as `TextSlot.fill`,
+ * the library generates a `<linearGradient>` def keyed by node id and
+ * paints text glyphs with `url(#…)`.
+ *
+ * `angle` is in degrees, 0 = left-to-right (default), 90 = top-to-bottom.
+ */
+export interface LinearGradientFill {
+  from: string
+  to: string
+  /** In degrees. 0 = horizontal left→right (default). */
+  angle?: number
+}
+
+/**
  * Text label inside the region. Sized as a small kicker by default, but
  * can be enlarged via `fontSize` for use in a `body` slot (large headline
  * figures like `$142k`) or styled independently per-position.
@@ -309,11 +329,27 @@ export interface CountSlot {
  * `align` defaults to `start` for `header` / `footer` / `body`, `center`
  * otherwise. `uppercase` / `useLabelFont` default to `true` for `header`
  * (kicker styling) and `false` elsewhere.
+ *
+ * **Wrapping.** When `wrap` is `true` (default for `body` position, false
+ * elsewhere) the value is word-wrapped to fit `region.width`, splitting
+ * on `\n` to honor explicit paragraph breaks. The result is rendered as
+ * a single `<text>` element with one `<tspan>` per line and clipped to
+ * the region rect so overflow never escapes the node.
+ *
+ * **Gradient fill.** When `fill` is set to `{ from, to, angle? }`, the
+ * library defines a per-node `<linearGradient>` and paints the text with
+ * it. Useful for the "vision card" headline pattern. Plain `color`
+ * overrides apply only to the solid-fill case.
  */
 export interface TextSlot {
   kind: 'text'
   value: NodeAccessor<string>
   color?: NodeAccessor<string>
+  /**
+   * Optional gradient fill. When set, takes precedence over `color`.
+   * Static or per-node (function) — keyed gradients are scoped per node id.
+   */
+  fill?: NodeAccessor<LinearGradientFill>
   /** Font size in px. When omitted, uses a position-appropriate default. */
   fontSize?: NodeAccessor<number>
   /** Font weight (100–900). Defaults by position. */
@@ -329,6 +365,23 @@ export interface TextSlot {
   useLabelFont?: boolean
   /** Direct font-family override. Wins over `useLabelFont` when both set. */
   fontFamily?: NodeAccessor<string>
+  /**
+   * Word-wrap to `region.width`. Defaults to `true` for `body` position,
+   * `false` elsewhere. `\n` always honors paragraph breaks regardless.
+   */
+  wrap?: boolean
+  /**
+   * Cap on rendered lines when `wrap` is true. Excess content is
+   * truncated with an ellipsis. When omitted, all wrapped lines render
+   * (clipped to the region rect by the slot layer).
+   */
+  maxLines?: number
+  /**
+   * Override the per-line vertical advance in px. Defaults to roughly
+   * `fontSize * 1.25` so wrapped paragraphs read as a normal block of
+   * text.
+   */
+  lineHeight?: NodeAccessor<number>
 }
 
 /**
