@@ -17,7 +17,11 @@ interface RefIndicatorProps {
   strokeWidth?: number
   /** Which corner of the node to carve. Defaults to bottom-right. */
   corner?: Corner
-  /** Size of the carved square region. */
+  /**
+   * Size of the carved square region. When omitted, falls back to
+   * `theme.node.refIndicator.size` (default 18). The inner glyph scales
+   * proportionally with the carve.
+   */
   size?: number
   /** Fired when the user clicks the indicator. The parent should navigate. */
   onNavigate: (node: ResolvedNode, event: React.MouseEvent) => void
@@ -42,12 +46,14 @@ export function RefIndicator({
   strokeColor,
   strokeWidth,
   corner = 'bottom-right',
-  size = 18,
+  size: sizeProp,
   onNavigate,
 }: RefIndicatorProps) {
   const [hover, setHover] = useState(false)
   const iconKind = theme.node.refIndicator.icon
   if (iconKind === 'none') return null
+  // Resolve the carve size: explicit prop wins, else theme, else default 18.
+  const size = sizeProp ?? theme.node.refIndicator.size ?? 18
 
   const stopAll = (e: React.SyntheticEvent) => e.stopPropagation()
 
@@ -211,7 +217,7 @@ export function RefIndicator({
         fill="transparent"
       />
 
-      <Glyph kind={iconKind} cx={cx} cy={cy} color={hover ? hoverGlyph : restGlyph} />
+      <Glyph kind={iconKind} cx={cx} cy={cy} color={hover ? hoverGlyph : restGlyph} size={size} />
     </g>
   )
 }
@@ -221,15 +227,21 @@ function Glyph({
   cx,
   cy,
   color,
+  size,
 }: {
   kind: 'chevron' | 'arrow' | 'expand'
   cx: number
   cy: number
   color: string
+  /** Edge length of the surrounding carve square. */
+  size: number
 }) {
-  // Inner icon half-size. Slightly smaller than before so the glyph sits
-  // comfortably inside the 18px carved square with breathing room.
-  const s = 3
+  // Inner icon half-size, derived from the carve so the glyph scales with
+  // a configurable indicator. The 18px default carve produces s = 3, matching
+  // the previous hand-tuned value. Stroke widths scale similarly so a larger
+  // indicator gets a chunkier glyph instead of a hairline floating in space.
+  const s = size / 6
+  const sw = Math.max(1, size / 9)
   switch (kind) {
     case 'chevron':
       return (
@@ -237,7 +249,7 @@ function Glyph({
           d={`M ${cx - s / 2} ${cy - s} L ${cx + s / 2} ${cy} L ${cx - s / 2} ${cy + s}`}
           fill="none"
           stroke={color}
-          strokeWidth={2}
+          strokeWidth={sw}
           strokeLinecap="round"
           strokeLinejoin="round"
           pointerEvents="none"
@@ -250,26 +262,28 @@ function Glyph({
           d={`M ${cx - s} ${cy} L ${cx + s} ${cy} M ${cx + s - h} ${cy - h} L ${cx + s} ${cy} L ${cx + s - h} ${cy + h}`}
           fill="none"
           stroke={color}
-          strokeWidth={2}
+          strokeWidth={sw}
           strokeLinecap="round"
           strokeLinejoin="round"
           pointerEvents="none"
         />
       )
     }
-    case 'expand':
+    case 'expand': {
+      const sw2 = Math.max(1, size / 12)
       return (
         <g pointerEvents="none">
           <path
             d={`M ${cx - s} ${cy - s} L ${cx + s} ${cy - s} L ${cx + s} ${cy + s} L ${cx - s} ${cy + s} Z`}
             fill="none"
             stroke={color}
-            strokeWidth={1.5}
+            strokeWidth={sw2}
             strokeLinejoin="round"
           />
-          <line x1={cx} y1={cy - s + 1} x2={cx} y2={cy + s - 1} stroke={color} strokeWidth={1.5} strokeLinecap="round" />
-          <line x1={cx - s + 1} y1={cy} x2={cx + s - 1} y2={cy} stroke={color} strokeWidth={1.5} strokeLinecap="round" />
+          <line x1={cx} y1={cy - s + 1} x2={cx} y2={cy + s - 1} stroke={color} strokeWidth={sw2} strokeLinecap="round" />
+          <line x1={cx - s + 1} y1={cy} x2={cx + s - 1} y2={cy} stroke={color} strokeWidth={sw2} strokeLinecap="round" />
         </g>
       )
+    }
   }
 }

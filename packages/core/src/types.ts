@@ -501,6 +501,12 @@ export interface RefIndicatorConfig {
   hoverFill?: string
   /** Hover glyph color. Defaults to `theme.background` (inverted on the fill). */
   hoverColor?: string
+  /**
+   * Edge length (px) of the carved square hit/visual region. Defaults to 18.
+   * Increase for a more prominent / easier-to-tap "enter sub-canvas" affordance.
+   * The inner glyph scales proportionally.
+   */
+  size?: number
 }
 
 export interface NodeTheme {
@@ -667,12 +673,14 @@ export interface CanvasTheme {
    */
   nodeActions?: NodeActionGroup[]
   /**
-   * When true, suppress the trailing delete button in the node toolbar.
-   * Defaults to false (delete button shown). Consumers who want a custom
-   * delete action (confirmation dialog, soft-delete, etc.) can hide the
-   * built-in button and add their own via `nodeActions`.
+   * When true, append the built-in trailing delete button to the node
+   * toolbar. Defaults to false (no delete button) — the library is opinion-
+   * free about destructive actions, and most consumers want a confirmation
+   * dialog, soft-delete, or a custom delete action wired via `nodeActions`
+   * rather than a one-click trash icon. Users can always delete a selected
+   * node with the Delete/Backspace keys regardless of this flag.
    */
-  hideToolbarDelete?: boolean
+  showToolbarDelete?: boolean
 }
 
 // ---------------------------------------------------------------------------

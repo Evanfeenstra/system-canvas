@@ -96,7 +96,7 @@ We extend the [JSON Canvas spec](https://jsoncanvas.org) with two optional field
 
 ### Navigation model
 
-Navigation is discrete, not continuous zoom. Navigable nodes render a clickable **carved corner** (bottom-right for text/file/link, top-right for groups) that continues the node's own stroke to form a small square containing an arrow/chevron. Clicking that corner pushes a new canvas onto a breadcrumb stack.
+Navigation is discrete, not continuous zoom. Navigable nodes render a clickable **carved corner** (bottom-right for text/file/link, top-right for groups) that continues the node's own stroke to form a small square containing an arrow/chevron. Clicking that corner pushes a new canvas onto a breadcrumb stack. The carve's edge length is driven by `theme.node.refIndicator.size` (default 18); the inner glyph and stroke widths scale proportionally so larger indicators stay visually balanced.
 
 Clicking the node body itself never navigates — it fires `onNodeClick` and (in editable mode) selects the node. Double-clicking a node always opens the inline editor in editable mode.
 
@@ -160,7 +160,7 @@ All four fields are optional and additive — existing themes behave identically
 
 ### Node toolbar actions
 
-`theme.nodeActions: NodeActionGroup[]` drives the floating toolbar. Each group has a `kind`: `'swatches'` (colored dots), `'buttons'` (icon buttons), or `'menu'` (dropdown whose trigger reflects the currently-active action). When a theme declares `nodeActions`, it fully replaces the default color-swatch group (no auto-merge). Each `NodeAction` has a `patch` (object or `(node) => NodeUpdate`) that can mutate **any** node field — not just `color`. Combined with `isActive(node)` and `appliesTo(node)` this is the extension point for status pickers, type switchers, toggles, and cycles. The canonical pattern for roadmap-style UIs is a `swatches` group where each dot sets `{ category }` (and optionally `color`), with `isActive` keyed on `category` — so what looks like a color picker is actually a status picker. The trailing delete button is shown by default; set `theme.hideToolbarDelete = true` to suppress it (e.g. when the consumer wants a confirmation dialog or a custom delete action via `nodeActions`).
+`theme.nodeActions: NodeActionGroup[]` drives the floating toolbar. Each group has a `kind`: `'swatches'` (colored dots), `'buttons'` (icon buttons), or `'menu'` (dropdown whose trigger reflects the currently-active action). When a theme declares `nodeActions`, it fully replaces the default color-swatch group (no auto-merge). Each `NodeAction` has a `patch` (object or `(node) => NodeUpdate`) that can mutate **any** node field — not just `color`. Combined with `isActive(node)` and `appliesTo(node)` this is the extension point for status pickers, type switchers, toggles, and cycles. The canonical pattern for roadmap-style UIs is a `swatches` group where each dot sets `{ category }` (and optionally `color`), with `isActive` keyed on `category` — so what looks like a color picker is actually a status picker. The trailing delete button is **off by default** — set `theme.showToolbarDelete = true` to opt in. Consumers who want confirmation dialogs, soft-delete, or a custom delete action wired via `nodeActions` get the empty default; users can still delete a selected node with the Delete/Backspace keys regardless of this flag.
 
 ### Theme system
 

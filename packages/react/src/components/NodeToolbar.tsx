@@ -208,7 +208,7 @@ function DefaultToolbarContent({
     () => getNodeActionsForNode(node, theme),
     [node, theme]
   )
-  const showDelete = !theme.hideToolbarDelete
+  const showDelete = theme.showToolbarDelete === true
 
   return (
     <>
