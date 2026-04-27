@@ -129,11 +129,12 @@ export function NodeText({
   }
 
   // ----- Wrapped -----
-  // Reserve a tiny horizontal safety margin so the rough glyph-width
-  // estimate doesn't push the last word past the rounded corner.
-  const wrapInset = 4
-  const wrapWidth = Math.max(0, region.width - wrapInset * 2)
-  const lines = wrapTextWithBreaks(displayValue, wrapWidth, fontSize, maxLines)
+  // Wrap to the region's full width. The slot layer clips wrapped
+  // output to the region rect as a safety net, so any minor rendering
+  // overflow under the rounded corners is hidden visually rather than
+  // pre-empted by an aggressive inset (which would cause "wraps too
+  // early" with whitespace still visible on the right).
+  const lines = wrapTextWithBreaks(displayValue, region.width, fontSize, maxLines)
   if (lines.length === 0) return null
 
   // Baseline anchor: top of region + one ascent. Subsequent lines use

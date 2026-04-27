@@ -6,20 +6,27 @@
 // `kind: 'custom'` slots can reuse the same wrap behavior the declarative
 // `kind: 'text'` slot uses internally.
 //
-// The width estimate is intentionally rough (a single per-glyph ratio). For
-// SVG text in monospace or near-monospace UI fonts at small sizes (10-18px),
-// it's accurate enough that wrapped lines fit comfortably with a small
-// trailing safety margin. We do not attempt real font metrics — that would
-// require a DOM canvas or a font-shaping library, and would change the
-// library's "pure math" boundary.
+// The width estimate is intentionally rough (a single per-glyph ratio). We
+// do not attempt real font metrics — that would require a DOM canvas or a
+// font-shaping library, and would change the library's "pure math" boundary.
+// The slot layer wraps wrapped output in a clipPath as a safety net, so a
+// slight underestimate here is tolerable; aggressive overestimates produce
+// the visible "wraps too early" bug where lines break with whitespace still
+// available to the right.
 // ---------------------------------------------------------------------------
 
 /**
  * Average glyph-width-to-font-size ratio used by `measureTextWidth`. Tuned
- * for UI sans/mono mixes; matches what most consumer code reaches for when
- * estimating SVG text widths in the absence of real font metrics.
+ * to fit modern UI fonts (Inter, SF Pro, system-ui) at small sizes — these
+ * average ~0.5 per glyph in proportional mode, while monospace caps at
+ * ~0.6. We use 0.55 as a single number that covers both cases without
+ * wrapping aggressively when the text is rendered in a proportional font.
+ *
+ * If a consumer's text wraps too early, the answer is *not* to lower this
+ * further (overly tight estimates cause line overflow in monospace text);
+ * pass a `wrap: false` slot or render `kind: 'custom'` for full control.
  */
-const GLYPH_WIDTH_RATIO = 0.62
+const GLYPH_WIDTH_RATIO = 0.55
 
 /**
  * Rough width in pixels for `text` rendered at `fontSize`. Uses a single

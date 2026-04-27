@@ -1,6 +1,6 @@
 {
   "name": "system-canvas-standalone",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Self-contained browser bundle for system-canvas. Drop-in <script> tag with React inlined; renders a fully interactive canvas into any DOM element.",
   "license": "MIT",
   "type": "module",
