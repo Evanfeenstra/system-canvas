@@ -58,6 +58,22 @@ export const blueprintTheme: CanvasTheme = {
     fontSize: 11,
   },
 
+  contextMenu: {
+    background: 'rgba(10, 22, 40, 0.97)',
+    borderColor: 'rgba(74, 144, 217, 0.45)',
+    borderRadius: 8,
+    itemColor: '#d4e5f7',
+    itemHoverBackground: 'rgba(74, 144, 217, 0.18)',
+    destructiveItemColor: '#fb7185',
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: 11,
+    paddingY: 5,
+    paddingX: 5,
+    itemPaddingY: 6,
+    itemPaddingX: 10,
+    shadow: '0 8px 24px rgba(10,22,40,0.5)',
+  },
+
   lanes: {
     bandFillEven: 'rgba(19, 34, 68, 0.45)',
     bandFillOdd: 'rgba(19, 34, 68, 0.15)',

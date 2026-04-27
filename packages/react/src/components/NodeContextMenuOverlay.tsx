@@ -1,0 +1,211 @@
+import React, { useEffect, useRef, useState } from 'react'
+import type {
+  CanvasNode,
+  CanvasTheme,
+  ContextMenuTheme,
+  NodeContextMenuConfig,
+  NodeContextMenuItem,
+  NodeContextMenuMatchContext,
+} from 'system-canvas'
+import { NodeIcon } from './NodeIcon.js'
+
+/**
+ * State the overlay needs to render itself for one open instance. The
+ * library owns this state — the consumer never sees it.
+ */
+export interface NodeContextMenuOverlayState {
+  /** Filtered items (already passed `match` predicates). */
+  items: NodeContextMenuItem[]
+  node: CanvasNode
+  /** clientX/clientY at the time of the right-click. */
+  screenPosition: { x: number; y: number }
+  /** Canvas the right-clicked node lives on. `null` for root. */
+  canvasRef: string | null
+}
+
+interface NodeContextMenuOverlayProps {
+  state: NodeContextMenuOverlayState | null
+  config: NodeContextMenuConfig
+  theme: CanvasTheme
+  /** Called whenever the menu should close (outside-click, Esc, item pick). */
+  onClose: () => void
+}
+
+/** Approximate menu width — only used for off-right-edge clamping. */
+const ESTIMATED_MENU_WIDTH = 220
+const MIN_MENU_WIDTH = 180
+const VIEWPORT_MARGIN = 8
+
+/**
+ * Floating, dismissible menu rendered above the canvas at the user's
+ * right-click position. Lives outside the SVG (a regular HTML `<div>` with
+ * `position: fixed`) so it isn't clipped by the canvas viewport and
+ * doesn't interfere with d3-zoom hit-testing.
+ *
+ * Dismissal: outside `mousedown`, Escape, scroll, window blur, or after
+ * the consumer's `onSelect` runs. We don't dismiss on right-click outside
+ * because the user is likely starting another context-menu gesture; the
+ * library's next `onContextMenu` will replace this state via the parent.
+ */
+export function NodeContextMenuOverlay({
+  state,
+  config,
+  theme,
+  onClose,
+}: NodeContextMenuOverlayProps) {
+  const rootRef = useRef<HTMLDivElement | null>(null)
+  // Hover state by item id. Plain object is fine — never more than a
+  // handful of items, and we re-render the whole menu per state change.
+  const [hoveredId, setHoveredId] = useState<string | null>(null)
+
+  // Reset hover whenever a new menu opens so the prior selection doesn't
+  // visually carry over to the next right-click.
+  useEffect(() => {
+    if (state) setHoveredId(null)
+  }, [state])
+
+  // Outside-click / Escape / scroll / blur dismissal. Only wired while open.
+  useEffect(() => {
+    if (!state) return
+    function onDown(e: MouseEvent) {
+      const root = rootRef.current
+      if (!root) return
+      if (root.contains(e.target as Node)) return
+      onClose()
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        onClose()
+      }
+    }
+    function onScroll() {
+      onClose()
+    }
+    window.addEventListener('mousedown', onDown)
+    window.addEventListener('keydown', onKey)
+    // `true` so we catch scroll on any nested element. Passive — we don't
+    // call preventDefault, just dismiss.
+    window.addEventListener('scroll', onScroll, true)
+    window.addEventListener('blur', onClose)
+    return () => {
+      window.removeEventListener('mousedown', onDown)
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('scroll', onScroll, true)
+      window.removeEventListener('blur', onClose)
+    }
+  }, [state, onClose])
+
+  if (!state) return null
+  const cm: ContextMenuTheme | undefined = theme.contextMenu
+  // If a consumer plugs in a hand-rolled CanvasTheme (not via resolveTheme)
+  // and forgets the contextMenu block, render nothing rather than throwing.
+  // Library is opt-in: passing `nodeContextMenu` is the consumer's signal
+  // that they want the menu, but a missing theme block is recoverable.
+  if (!cm) return null
+
+  // Clamp position so the menu doesn't render off the right/bottom edges.
+  // Width estimate is conservative; the menu can grow wider via min-width.
+  const vw = typeof window !== 'undefined' ? window.innerWidth : 0
+  const vh = typeof window !== 'undefined' ? window.innerHeight : 0
+  const itemHeight = cm.itemPaddingY * 2 + cm.fontSize + 4
+  const estimatedHeight = state.items.length * itemHeight + cm.paddingY * 2
+  const left = vw
+    ? Math.min(state.screenPosition.x, vw - ESTIMATED_MENU_WIDTH - VIEWPORT_MARGIN)
+    : state.screenPosition.x
+  const top = vh
+    ? Math.min(state.screenPosition.y, vh - estimatedHeight - VIEWPORT_MARGIN)
+    : state.screenPosition.y
+
+  const matchCtx: NodeContextMenuMatchContext = { canvasRef: state.canvasRef }
+
+  return (
+    <div
+      ref={rootRef}
+      role="menu"
+      // Stop right-clicks inside the menu from bubbling into the document
+      // listener and re-opening the canvas-level menu.
+      onContextMenu={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+      }}
+      style={{
+        position: 'fixed',
+        left,
+        top,
+        zIndex: 1000,
+        minWidth: MIN_MENU_WIDTH,
+        padding: `${cm.paddingY}px ${cm.paddingX}px`,
+        background: cm.background,
+        color: cm.itemColor,
+        border: `1px solid ${cm.borderColor}`,
+        borderRadius: cm.borderRadius,
+        boxShadow: cm.shadow,
+        fontFamily: cm.fontFamily,
+        fontSize: cm.fontSize,
+        backdropFilter: 'blur(10px)',
+        userSelect: 'none',
+        // `pointer-events: auto` so the menu still receives clicks even
+        // when a parent canvas overlay disables them.
+        pointerEvents: 'auto',
+      }}
+    >
+      {state.items.map((item) => {
+        const isDisabled = item.disabled?.(state.node, matchCtx) ?? false
+        const isHovered = !isDisabled && hoveredId === item.id
+        const color = item.destructive ? cm.destructiveItemColor : cm.itemColor
+        return (
+          <div
+            key={item.id}
+            role="menuitem"
+            aria-disabled={isDisabled}
+            onMouseEnter={() => !isDisabled && setHoveredId(item.id)}
+            onMouseLeave={() => setHoveredId((id) => (id === item.id ? null : id))}
+            onClick={() => {
+              if (isDisabled) return
+              config.onSelect(item.id, state.node, {
+                canvasRef: state.canvasRef,
+                screenPosition: state.screenPosition,
+              })
+              onClose()
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              padding: `${cm.itemPaddingY}px ${cm.itemPaddingX}px`,
+              borderRadius: Math.max(0, cm.borderRadius - 4),
+              cursor: isDisabled ? 'not-allowed' : 'pointer',
+              opacity: isDisabled ? 0.45 : 1,
+              background: isHovered ? cm.itemHoverBackground : 'transparent',
+              color,
+            }}
+          >
+            {item.icon ? (
+              <svg
+                width={14}
+                height={14}
+                viewBox="0 0 16 16"
+                style={{ flexShrink: 0, overflow: 'visible' }}
+              >
+                <NodeIcon
+                  icon={item.icon}
+                  x={0}
+                  y={0}
+                  size={14}
+                  color={color}
+                  opacity={1}
+                  customIcons={theme.icons}
+                />
+              </svg>
+            ) : (
+              // Spacer so labels align whether or not an icon is present.
+              <span style={{ width: 14, flexShrink: 0 }} aria-hidden />
+            )}
+            <span style={{ flex: 1 }}>{item.label}</span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}

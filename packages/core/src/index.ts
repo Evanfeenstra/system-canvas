@@ -21,12 +21,17 @@ export type {
   LanesTheme,
   CanvasLane,
   CanvasTheme,
+  ContextMenuTheme,
   ResolvedNode,
   AnchorPoint,
   ViewportState,
   BreadcrumbEntry,
   BoundingBox,
   ContextMenuEvent,
+  NodeContextMenuItem,
+  NodeContextMenuConfig,
+  NodeContextMenuMatchContext,
+  NodeContextMenuSelectContext,
   NodeUpdate,
   EdgeUpdate,
   NodeMenuOption,
@@ -92,6 +97,12 @@ export {
   buildDefaultToolbar,
   filterActionsForNode,
 } from './actions.js'
+
+// Context-menu filtering helpers
+export {
+  matchesContextMenuItem,
+  filterContextMenuItems,
+} from './contextMenu.js'
 
 // Rollup helpers
 export { rollupNodes, rollupNodesDeep } from './rollup.js'

@@ -58,6 +58,22 @@ export const midnightTheme: CanvasTheme = {
     fontSize: 11,
   },
 
+  contextMenu: {
+    background: 'rgba(0, 0, 0, 0.96)',
+    borderColor: 'rgba(55, 65, 81, 0.7)',
+    borderRadius: 8,
+    itemColor: '#d1d5db',
+    itemHoverBackground: 'rgba(0, 255, 136, 0.12)',
+    destructiveItemColor: '#f87171',
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: 11,
+    paddingY: 5,
+    paddingX: 5,
+    itemPaddingY: 6,
+    itemPaddingX: 10,
+    shadow: '0 8px 24px rgba(0,255,136,0.08)',
+  },
+
   lanes: {
     bandFillEven: 'rgba(17, 17, 17, 0.7)',
     bandFillOdd: 'rgba(0, 0, 0, 0)',

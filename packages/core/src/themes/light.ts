@@ -58,6 +58,22 @@ export const lightTheme: CanvasTheme = {
     fontSize: 12,
   },
 
+  contextMenu: {
+    background: 'rgba(255, 255, 255, 0.98)',
+    borderColor: 'rgba(203, 213, 225, 0.9)',
+    borderRadius: 10,
+    itemColor: '#1e293b',
+    itemHoverBackground: 'rgba(148, 163, 184, 0.18)',
+    destructiveItemColor: '#dc2626',
+    fontFamily: "'Inter', 'Helvetica Neue', sans-serif",
+    fontSize: 12,
+    paddingY: 6,
+    paddingX: 6,
+    itemPaddingY: 6,
+    itemPaddingX: 10,
+    shadow: '0 8px 24px rgba(15,23,42,0.12)',
+  },
+
   lanes: {
     bandFillEven: 'rgba(148, 163, 184, 0.10)', // slate-400 soft
     bandFillOdd: 'rgba(148, 163, 184, 0.03)',

@@ -561,6 +561,43 @@ export interface BreadcrumbTheme {
   fontSize: number
 }
 
+/**
+ * Visual styling for the floating node context menu (right-click on a node).
+ *
+ * The menu itself is opt-in: it only renders when the consumer passes a
+ * `nodeContextMenu` config to `<SystemCanvas>`. When omitted from the theme,
+ * the library falls back to a sensible dark-glass default that matches the
+ * breadcrumb / add-node aesthetic.
+ */
+export interface ContextMenuTheme {
+  /** Menu surface background. Usually a translucent slate. */
+  background: string
+  /** Border around the menu surface. */
+  borderColor: string
+  /** Border radius of the menu surface, in pixels. */
+  borderRadius: number
+  /** Default item text color. */
+  itemColor: string
+  /** Background color when an item is hovered. */
+  itemHoverBackground: string
+  /** Text color for items declared with `destructive: true`. */
+  destructiveItemColor: string
+  /** Font family for menu items. */
+  fontFamily: string
+  /** Font size for menu items, in pixels. */
+  fontSize: number
+  /** Vertical padding inside the menu surface, in pixels. */
+  paddingY: number
+  /** Horizontal padding inside the menu surface, in pixels. */
+  paddingX: number
+  /** Vertical padding inside each item, in pixels. */
+  itemPaddingY: number
+  /** Horizontal padding inside each item, in pixels. */
+  itemPaddingX: number
+  /** Box-shadow CSS string applied to the menu surface. */
+  shadow: string
+}
+
 export interface LanesTheme {
   /** Fill color for odd-indexed bands (0, 2, 4, ...). */
   bandFillEven: string
@@ -655,6 +692,13 @@ export interface CanvasTheme {
   group: GroupTheme
   breadcrumbs: BreadcrumbTheme
   lanes: LanesTheme
+  /**
+   * Styling for the floating node context menu surfaced when the consumer
+   * passes a `nodeContextMenu` config to `<SystemCanvas>`. Optional; the
+   * library substitutes a dark-glass default when omitted, so existing
+   * themes don't need to opt in to keep working.
+   */
+  contextMenu?: ContextMenuTheme
   /** Map preset colors "1"-"6" to fill/stroke */
   presetColors: Record<string, PresetColor>
   /** Map category strings to visual definitions */
@@ -748,7 +792,118 @@ export interface BoundingBox {
 export interface ContextMenuEvent {
   type: 'node' | 'edge' | 'canvas'
   target?: CanvasNode | CanvasEdge
+  /**
+   * Position of the right-click in canvas-space (post-pan/zoom). Useful
+   * for placing a node-relative annotation or computing distances against
+   * other canvas content.
+   */
   position: { x: number; y: number }
+  /**
+   * Position of the right-click in viewport-space (raw clientX/clientY).
+   * Use this when rendering a `position: fixed` floating menu — canvas
+   * coordinates would be wrong because they'd shift as the user pans/zooms.
+   */
+  screenPosition: { x: number; y: number }
+}
+
+// ---------------------------------------------------------------------------
+// Declarative node context menu
+//
+// A consumer can pass a `nodeContextMenu` config to `<SystemCanvas>` and the
+// library will render a small floating menu when the user right-clicks a
+// node. Items are declared once and filtered per-node via `match` predicates.
+// This is the high-level API; consumers who need full control can still
+// implement their own menu using the raw `onContextMenu` callback.
+// ---------------------------------------------------------------------------
+
+/**
+ * Context passed to a context-menu item's `match` predicate so it can decide
+ * whether to surface for the right-clicked node. Carries only what the
+ * library knows for free; consumer-owned data (like the user's role)
+ * should be closed over by the predicate itself.
+ */
+export interface NodeContextMenuMatchContext {
+  /** Ref of the canvas the node lives on. `null` for the root canvas. */
+  canvasRef: string | null
+}
+
+/**
+ * One row in the node context menu. Items are filtered per-node by the
+ * optional `match` predicate before the menu renders; items that don't
+ * match are silently dropped, and a node with zero matching items skips
+ * the menu entirely (no empty popover, no swallowed right-click — the
+ * browser's default menu still won't appear because the library
+ * preventDefault's all node right-clicks).
+ */
+export interface NodeContextMenuItem {
+  /** Stable identifier echoed back to `onSelect`. */
+  id: string
+  /** Visible label. */
+  label: string
+  /**
+   * Optional icon key — looked up in the theme's `icons` map (or the
+   * built-in set), drawn at 14×14 to the left of the label.
+   */
+  icon?: string
+  /**
+   * When true, the item is rendered with `destructiveItemColor` from the
+   * theme. Purely cosmetic — the consumer's `onSelect` is still
+   * responsible for any confirmation flow.
+   */
+  destructive?: boolean
+  /**
+   * Filter predicate: which nodes does this item appear on?
+   *
+   *   - `categories`: match nodes whose `category` is in this list.
+   *   - `types`:      match nodes whose `type` is in this list.
+   *   - `when(node, ctx)`: arbitrary predicate; receives the right-clicked
+   *     node and the canvas ref it lives on.
+   *
+   * Multiple shortcuts are ANDed together — an item with both
+   * `categories` and `when` only shows when both pass. Omitting `match`
+   * entirely matches every node.
+   */
+  match?: {
+    categories?: string[]
+    types?: NodeType[]
+    when?: (node: CanvasNode, ctx: NodeContextMenuMatchContext) => boolean
+  }
+  /**
+   * Optional per-node disabled state. The item still renders (so users see
+   * what's available) but is non-clickable and visually muted.
+   */
+  disabled?: (node: CanvasNode, ctx: NodeContextMenuMatchContext) => boolean
+}
+
+/**
+ * Context passed to `onSelect` when the user picks an item. Includes the
+ * screen position of the original right-click so the consumer can spawn a
+ * follow-up popover or dialog at the same spot.
+ */
+export interface NodeContextMenuSelectContext extends NodeContextMenuMatchContext {
+  screenPosition: { x: number; y: number }
+}
+
+/**
+ * Top-level config for the declarative node context menu.
+ */
+export interface NodeContextMenuConfig {
+  /**
+   * All possible items, in display order. Filtered per-node via each
+   * item's `match` predicate before render.
+   */
+  items: NodeContextMenuItem[]
+  /**
+   * Called when the user clicks an item. Receives the item id, the
+   * right-clicked node, and a context with the canvas ref + screen
+   * position. The consumer typically dispatches on `itemId` to open a
+   * dialog, fire an API call, or mutate the canvas.
+   */
+  onSelect: (
+    itemId: string,
+    node: CanvasNode,
+    ctx: NodeContextMenuSelectContext
+  ) => void
 }
 
 // ---------------------------------------------------------------------------

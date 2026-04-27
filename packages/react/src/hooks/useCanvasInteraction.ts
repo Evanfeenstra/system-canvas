@@ -131,6 +131,11 @@ export function useCanvasInteraction(
           type,
           target,
           position: canvasPos,
+          // Raw viewport coords from the original MouseEvent. Consumers
+          // rendering a `position: fixed` floating menu need these — the
+          // canvas-space `position` would be wrong because it walks
+          // with the user's pan/zoom.
+          screenPosition: { x: event.clientX, y: event.clientY },
         })
       }
     },

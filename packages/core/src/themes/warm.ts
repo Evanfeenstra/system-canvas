@@ -58,6 +58,22 @@ export const warmTheme: CanvasTheme = {
     fontSize: 12,
   },
 
+  contextMenu: {
+    background: 'rgba(26, 23, 20, 0.97)',
+    borderColor: 'rgba(107, 94, 74, 0.6)',
+    borderRadius: 8,
+    itemColor: '#e8ddd0',
+    itemHoverBackground: 'rgba(107, 94, 74, 0.3)',
+    destructiveItemColor: '#fb7185',
+    fontFamily: "'IBM Plex Mono', monospace",
+    fontSize: 12,
+    paddingY: 6,
+    paddingX: 6,
+    itemPaddingY: 6,
+    itemPaddingX: 10,
+    shadow: '0 8px 24px rgba(0,0,0,0.4)',
+  },
+
   lanes: {
     bandFillEven: 'rgba(42, 37, 32, 0.55)',
     bandFillOdd: 'rgba(42, 37, 32, 0.2)',

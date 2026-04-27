@@ -58,6 +58,22 @@ export const darkTheme: CanvasTheme = {
     fontSize: 12,
   },
 
+  contextMenu: {
+    background: 'rgba(15, 23, 42, 0.96)', // slate-900 near-opaque
+    borderColor: 'rgba(71, 85, 105, 0.6)', // slate-600
+    borderRadius: 10,
+    itemColor: '#e2e8f0',                  // slate-200
+    itemHoverBackground: 'rgba(71, 85, 105, 0.35)',
+    destructiveItemColor: '#fb7185',       // rose-400
+    fontFamily: "'JetBrains Mono', 'Fira Code', 'SF Mono', monospace",
+    fontSize: 12,
+    paddingY: 6,
+    paddingX: 6,
+    itemPaddingY: 6,
+    itemPaddingX: 10,
+    shadow: '0 8px 24px rgba(0,0,0,0.35)',
+  },
+
   lanes: {
     bandFillEven: 'rgba(30, 41, 59, 0.18)',  // slate-800 soft
     bandFillOdd: 'rgba(30, 41, 59, 0.06)',

@@ -1,6 +1,7 @@
 import type {
   CanvasTheme,
   CanvasNode,
+  ContextMenuTheme,
   ResolvedNode,
   PresetColor,
 } from '../types.js'
@@ -22,6 +23,12 @@ export function resolveTheme(
     group: { ...base.group, ...partial.group },
     breadcrumbs: { ...base.breadcrumbs, ...partial.breadcrumbs },
     lanes: { ...base.lanes, ...partial.lanes },
+    // contextMenu is optional on CanvasTheme but darkTheme always defines it,
+    // so the resolved theme is guaranteed to have a populated block as long
+    // as `base` is a complete theme (which is the contract).
+    contextMenu: partial.contextMenu
+      ? { ...(base.contextMenu as ContextMenuTheme), ...partial.contextMenu }
+      : base.contextMenu,
     presetColors: { ...base.presetColors, ...partial.presetColors },
     categories: { ...base.categories, ...partial.categories },
     icons: partial.icons

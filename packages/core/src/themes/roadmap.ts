@@ -64,6 +64,22 @@ export const roadmapTheme: CanvasTheme = {
     fontSize: 12,
   },
 
+  contextMenu: {
+    background: 'rgba(15, 17, 21, 0.96)',
+    borderColor: 'rgba(63, 69, 83, 0.8)',
+    borderRadius: 10,
+    itemColor: '#e8ebf2',
+    itemHoverBackground: 'rgba(90, 100, 120, 0.3)',
+    destructiveItemColor: '#fb7185',
+    fontFamily: "'Inter', 'Helvetica Neue', sans-serif",
+    fontSize: 12,
+    paddingY: 6,
+    paddingX: 6,
+    itemPaddingY: 6,
+    itemPaddingX: 10,
+    shadow: '0 8px 24px rgba(0,0,0,0.4)',
+  },
+
   // Slightly stronger lane fills than the other themes — roadmap columns
   // should read as the primary structure of the canvas.
   lanes: {

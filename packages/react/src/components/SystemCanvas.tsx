@@ -15,6 +15,7 @@ import type {
   EdgeStyle,
   ViewportState,
   ContextMenuEvent,
+  NodeContextMenuConfig,
   ResolvedNode,
   NodeUpdate,
   EdgeUpdate,
@@ -28,6 +29,7 @@ import {
   themes,
   getNodeMenuOptions,
   createNodeFromOption,
+  filterContextMenuItems,
   screenToCanvas,
   snapToLane,
 } from 'system-canvas'
@@ -46,6 +48,10 @@ import { Breadcrumbs } from './Breadcrumbs.js'
 import { AddNodeButton, type AddNodeButtonRenderProps } from './AddNodeButton.js'
 import { LaneHeaders } from './LaneHeaders.js'
 import { NodeToolbar, type NodeToolbarRenderProps } from './NodeToolbar.js'
+import {
+  NodeContextMenuOverlay,
+  type NodeContextMenuOverlayState,
+} from './NodeContextMenuOverlay.js'
 
 export interface SystemCanvasProps {
   /** Canvas data to render */
@@ -75,6 +81,23 @@ export interface SystemCanvasProps {
   onEdgeClick?: (edge: CanvasEdge) => void
   onEdgeDoubleClick?: (edge: CanvasEdge) => void
   onContextMenu?: (event: ContextMenuEvent) => void
+
+  /**
+   * Declarative right-click menu for nodes. When provided, the library
+   * renders a small floating menu at the right-click position with the
+   * subset of items that match the right-clicked node (per each item's
+   * `match` predicate). On selection, `config.onSelect` fires with the
+   * item id, the node, and a context that includes the canvas ref and
+   * the original screen position.
+   *
+   * Coexists with `onContextMenu` — both fire on the same right-click,
+   * so consumers can mix declarative items (the common case) with
+   * imperative behavior (the escape hatch).
+   *
+   * Without this prop, no library-rendered menu appears. Right-clicks
+   * still suppress the browser default and forward through `onContextMenu`.
+   */
+  nodeContextMenu?: NodeContextMenuConfig
 
   // --- Editing ---
   /** When true, the canvas becomes editable (add / edit / move / delete). */
@@ -229,6 +252,7 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
       onEdgeClick,
       onEdgeDoubleClick,
       onContextMenu,
+      nodeContextMenu,
       editable = false,
       onNodeAdd,
       onNodeUpdate,
@@ -720,6 +744,57 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
     setEditingEdgeId(edge.id)
   }, [])
 
+  // Declarative node context menu state. `null` = closed; non-null is the
+  // open menu's data (filtered items, target node, screen position, the
+  // canvas ref the node lives on). Lives here rather than inside
+  // `NodeContextMenuOverlay` so the right-click handler — which knows the
+  // current canvas ref — can populate it directly.
+  const [contextMenuState, setContextMenuState] =
+    useState<NodeContextMenuOverlayState | null>(null)
+
+  // Reset the open menu whenever the user navigates between canvases. The
+  // node it was anchored to may not exist on the new scope; even if it
+  // does, the menu's screen position would be stale.
+  useEffect(() => {
+    setContextMenuState(null)
+  }, [currentCanvasRef])
+
+  /**
+   * Bridge handler: forwards every right-click to the consumer's
+   * `onContextMenu` callback (unchanged contract), AND if a declarative
+   * `nodeContextMenu` is configured and this is a node hit, opens the
+   * library-rendered floating menu with the matching items.
+   *
+   * Both behaviors run on the same event so mixing declarative items with
+   * an imperative escape hatch (e.g. a custom edge menu) just works.
+   */
+  const handleContextMenu = useCallback(
+    (event: ContextMenuEvent) => {
+      onContextMenu?.(event)
+      if (!nodeContextMenu) return
+      if (event.type !== 'node') return
+      const node = event.target as CanvasNode | undefined
+      if (!node) return
+      const matched = filterContextMenuItems(nodeContextMenu.items, node, {
+        canvasRef: currentCanvasRef ?? null,
+      })
+      if (matched.length === 0) {
+        // No items applied to this node — close any stale menu and let
+        // the right-click be a no-op (the browser default is already
+        // suppressed by the underlying interaction hook).
+        setContextMenuState(null)
+        return
+      }
+      setContextMenuState({
+        items: matched,
+        node,
+        screenPosition: event.screenPosition,
+        canvasRef: currentCanvasRef ?? null,
+      })
+    },
+    [onContextMenu, nodeContextMenu, currentCanvasRef]
+  )
+
   // Interaction handlers
   const {
     handleNodeClick,
@@ -736,7 +811,7 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
     onNodeDoubleClick,
     onEdgeClick,
     onEdgeDoubleClick,
-    onContextMenu,
+    onContextMenu: handleContextMenu,
     onNavigableNodeClick: handleNavigableNodeClick,
     viewport: viewportStateRef,
     editable,
@@ -999,6 +1074,23 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
         (renderAddNodeButton
           ? renderAddNodeButton(renderProps)
           : <AddNodeButton {...renderProps} />)}
+
+      {/*
+       * Declarative node context menu. Renders only when the consumer
+       * passed `nodeContextMenu`; the overlay itself early-returns when
+       * `state` is null, so the cost of mounting is essentially nil for
+       * canvases that don't use this feature. Rendered last so it sits
+       * above every other library-managed overlay (toolbar, breadcrumbs,
+       * lane headers).
+       */}
+      {nodeContextMenu && (
+        <NodeContextMenuOverlay
+          state={contextMenuState}
+          config={nodeContextMenu}
+          theme={theme}
+          onClose={() => setContextMenuState(null)}
+        />
+      )}
     </div>
   )
   }
