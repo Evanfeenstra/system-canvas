@@ -99,10 +99,20 @@ export function NodeToolbar({
     return () => cancelAnimationFrame(raf)
   }, [getViewport])
 
-  // Position of the node's top-center in screen coords.
-  const topCenter = canvasToScreen(node.x + node.width / 2, node.y, viewport)
-  const bottomCenter = canvasToScreen(
-    node.x + node.width / 2,
+  // Anchor x in canvas space depends on the configured alignment. Default is
+  // 'center' (the toolbar centers over the node); 'left' anchors the toolbar's
+  // left edge to the node's left edge, 'right' anchors its right edge to the
+  // node's right edge. y is always the node's top / bottom edge.
+  const align = theme.toolbarAlign ?? 'center'
+  const anchorCanvasX =
+    align === 'left'
+      ? node.x
+      : align === 'right'
+        ? node.x + node.width
+        : node.x + node.width / 2
+  const topAnchor = canvasToScreen(anchorCanvasX, node.y, viewport)
+  const bottomAnchor = canvasToScreen(
+    anchorCanvasX,
     node.y + node.height,
     viewport
   )
@@ -124,13 +134,20 @@ export function NodeToolbar({
     return () => ro.disconnect()
   })
 
-  // Default position: centered horizontally above the node.
-  let left = topCenter.x - size.width / 2
-  let top = topCenter.y - size.height - NODE_GAP
+  // Resolve `left` from the anchor based on alignment. With 'center' the
+  // toolbar's center sits over the anchor; with 'left' / 'right' the
+  // corresponding edge of the toolbar sits over the anchor.
+  let left =
+    align === 'left'
+      ? topAnchor.x
+      : align === 'right'
+        ? topAnchor.x - size.width
+        : topAnchor.x - size.width / 2
+  let top = topAnchor.y - size.height - NODE_GAP
 
   // Flip below the node if it would clip the top of the viewport.
   if (top < FLIP_MARGIN) {
-    top = bottomCenter.y + NODE_GAP
+    top = bottomAnchor.y + NODE_GAP
   }
 
   // Clamp horizontally to the viewport so the toolbar stays readable.

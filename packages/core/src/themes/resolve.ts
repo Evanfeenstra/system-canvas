@@ -28,6 +28,8 @@ export function resolveTheme(
       ? { ...(base.icons ?? {}), ...partial.icons }
       : base.icons,
     nodeActions: partial.nodeActions ?? base.nodeActions,
+    showToolbarDelete: partial.showToolbarDelete ?? base.showToolbarDelete,
+    toolbarAlign: partial.toolbarAlign ?? base.toolbarAlign,
   }
 }
 

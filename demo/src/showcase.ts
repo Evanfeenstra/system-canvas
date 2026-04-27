@@ -562,6 +562,7 @@ export const showcaseTheme: CanvasTheme = resolveTheme(
       customer: customerCategory,
       revenue: revenueCategory,
     },
+    toolbarAlign: 'left',
   },
   darkTheme
 )

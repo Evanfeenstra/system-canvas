@@ -681,6 +681,15 @@ export interface CanvasTheme {
    * node with the Delete/Backspace keys regardless of this flag.
    */
   showToolbarDelete?: boolean
+  /**
+   * Horizontal alignment of the floating node toolbar relative to the
+   * selected node's top edge. `'center'` (default) anchors the toolbar's
+   * center to the node's center; `'left'` anchors its left edge to the
+   * node's left edge; `'right'` anchors its right edge to the node's right
+   * edge. The toolbar still flips below the node when it would clip the
+   * top of the viewport, and is clamped to the viewport bounds in all modes.
+   */
+  toolbarAlign?: 'left' | 'center' | 'right'
 }
 
 // ---------------------------------------------------------------------------
