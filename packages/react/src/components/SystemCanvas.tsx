@@ -8,6 +8,7 @@ import React, {
   forwardRef,
 } from 'react'
 import type {
+  BreadcrumbEntry,
   CanvasData,
   CanvasNode,
   CanvasEdge,
@@ -74,6 +75,19 @@ export interface SystemCanvasProps {
 
   /** Called when a breadcrumb is clicked */
   onBreadcrumbClick?: (index: number) => void
+
+  /**
+   * Called whenever the breadcrumb trail changes — drill-in, breadcrumb
+   * click, programmatic `zoomIntoNode`, or `navigateBack` / `navigateToRoot`
+   * via the imperative handle. Receives the full trail starting with the
+   * root entry (no `ref`), so consumers can render their own breadcrumb UI
+   * or thread the trail into other surfaces (e.g. a chat overlay that
+   * tells an AI agent which canvas the user is on by name).
+   *
+   * Fires on the initial render with the root-only trail so subscribers
+   * always see at least one event without waiting for navigation.
+   */
+  onBreadcrumbsChange?: (breadcrumbs: BreadcrumbEntry[]) => void
 
   // --- Interaction callbacks ---
   onNodeClick?: (node: CanvasNode) => void
@@ -247,6 +261,7 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
       rootLabel = 'Home',
       onNavigate,
       onBreadcrumbClick,
+      onBreadcrumbsChange,
       onNodeClick,
       onNodeDoubleClick,
       onEdgeClick,
@@ -373,6 +388,15 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
     onNavigate,
     onBreadcrumbClick: handleBreadcrumbClick,
   })
+
+  // Notify the consumer whenever the breadcrumb trail changes. Uses
+  // the array reference from `useNavigation` directly — `setBreadcrumbs`
+  // there always produces a new array on mutation, so reference
+  // equality is a faithful change signal. Fires once on mount with the
+  // root-only trail so subscribers can initialize without polling.
+  useEffect(() => {
+    onBreadcrumbsChange?.(breadcrumbs)
+  }, [breadcrumbs, onBreadcrumbsChange])
 
   // Resolve theme with per-canvas awareness.
   //
