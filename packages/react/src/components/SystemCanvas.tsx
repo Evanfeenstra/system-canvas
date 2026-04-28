@@ -130,6 +130,56 @@ export interface SystemCanvasProps {
   ) => void
   onEdgeDelete?: (edgeId: string, canvasRef: string | undefined) => void
   onEdgeAdd?: (edge: CanvasEdge, canvasRef: string | undefined) => void
+
+  /**
+   * Predicate consulted while dragging a node. When the pointer hovers
+   * over another node, the library calls this with `(sources, target)`.
+   *
+   *   - `true`  → target gets the "droppable" highlight; on release
+   *               `onNodeDrop` fires and the source(s) snap back to
+   *               their pre-drag positions (no `onNodeUpdate` for x/y).
+   *   - `false` → no highlight; on release the drag falls through to
+   *               normal repositioning (commits via `onNodeUpdate`).
+   *
+   * Self-drop (target id matches any source id) is filtered before this
+   * is called — consumers don't need to special-case it.
+   *
+   * The signature uses an array (`sources: CanvasNode[]`) with a v1
+   * length-1 invariant so future multi-select drags can extend without
+   * breaking callers. Today the array always has exactly one entry.
+   *
+   * Called frequently during drag — keep it cheap (no fetches, no
+   * setState). Pure derivation from `source.category` /
+   * `target.category` / ids is the expected shape.
+   *
+   * When omitted, drop-on-node interaction is fully off and drags
+   * commit to position via `onNodeUpdate` as they always have.
+   */
+  canDropNodeOn?: (
+    sources: CanvasNode[],
+    target: CanvasNode
+  ) => boolean
+
+  /**
+   * Fires once on pointer release when a drag ended over a node that
+   * `canDropNodeOn` accepted. The library has already snapped the
+   * source(s) back to their pre-drag positions by the time this fires;
+   * the consumer's job is purely to mutate data and trigger a refetch.
+   *
+   * `ctx.canvasRef` matches the rest of the library's callbacks: the
+   * canvas the drop happened on, with `undefined` for the root canvas.
+   *
+   * Not called when:
+   *   - The drop landed on empty space (handled as a normal drag).
+   *   - The drop landed on a node where `canDropNodeOn` returned false.
+   *   - `canDropNodeOn` is not provided.
+   *   - The target was removed from the canvas data mid-drag.
+   */
+  onNodeDrop?: (
+    sources: CanvasNode[],
+    target: CanvasNode,
+    ctx: { canvasRef: string | undefined }
+  ) => void
   /** Fully replace the default add-node FAB. */
   renderAddNodeButton?: (props: AddNodeButtonRenderProps) => React.ReactNode
 
@@ -275,6 +325,8 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
       onEdgeUpdate,
       onEdgeDelete,
       onEdgeAdd,
+      canDropNodeOn,
+      onNodeDrop,
       renderAddNodeButton,
       showNodeToolbar = true,
       renderNodeToolbar,
@@ -585,10 +637,32 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
     [onNodeUpdate, currentCanvasRef, snapToLanes, currentCanvas.columns, currentCanvas.rows]
   )
 
-  const { dragOverrides, onPointerDown: onNodePointerDown } = useNodeDrag({
+  // Proxy ref pointing at the SVG element exposed by the viewport handle.
+  // Declared up here so `useNodeDrag` (drop-on-node hit-test) and
+  // `useEdgeCreate` (cursor-tracking) can both share it. The `.current`
+  // assignment runs every render below, after the viewport handle is
+  // populated; both hooks read `.current` lazily at gesture time, so
+  // declaration-vs-assignment ordering is fine.
+  const svgProxyRef = useRef<SVGSVGElement | null>(null)
+
+  const handleNodeDrop = useCallback(
+    (sources: CanvasNode[], target: CanvasNode) => {
+      onNodeDrop?.(sources, target, { canvasRef: currentCanvasRef })
+    },
+    [onNodeDrop, currentCanvasRef]
+  )
+
+  const {
+    dragOverrides,
+    dropTargetId,
+    onPointerDown: onNodePointerDown,
+  } = useNodeDrag({
     viewport: viewportStateRef,
     nodesRef,
     onCommit: commitDrag,
+    svgRef: svgProxyRef,
+    canDropNodeOn,
+    onNodeDrop: handleNodeDrop,
   })
 
   const { resizeOverrides, onHandlePointerDown: onResizeHandlePointerDown } =
@@ -614,9 +688,8 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
     return base
   }, [selectedId, nodeMap, dragOverrides, resizeOverrides])
 
-  // Proxy ref pointing at the SVG element exposed by the viewport handle.
-  // Updated on every render so useEdgeCreate can convert client coords.
-  const svgProxyRef = useRef<SVGSVGElement | null>(null)
+  // Keep the proxy SVG ref pointed at the viewport's current SVG element.
+  // Runs every render so useEdgeCreate / useNodeDrag both see the latest.
   svgProxyRef.current = viewportHandleRef.current?.getSvgElement() ?? null
 
   const handleEdgeCreated = useCallback(
@@ -1048,6 +1121,7 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
         selectedEdgeId={editable ? selectedEdgeId : null}
         editingEdgeId={editable ? editingEdgeId : null}
         dragOverrides={dragOverrides}
+        dropTargetId={dropTargetId}
         resizeOverrides={resizeOverrides}
         onResizeHandlePointerDown={editable ? onResizeHandlePointerDown : undefined}
         onEditorCommit={handleEditorCommit}

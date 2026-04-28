@@ -107,6 +107,13 @@ interface ViewportProps {
   selectedEdgeId?: string | null
   editingEdgeId?: string | null
   dragOverrides?: Map<string, { x: number; y: number }>
+  /**
+   * Id of the node currently accepted as a drop target by the consumer's
+   * `canDropNodeOn` predicate during a drag. When non-null, the matching
+   * node renders a "droppable" highlight halo. Null when no drag is in
+   * progress, no hover, or the predicate rejected the current hover.
+   */
+  dropTargetId?: string | null
   resizeOverrides?: Map<string, ResizeOverride>
   onResizeHandlePointerDown?: (
     node: ResolvedNode,
@@ -174,6 +181,7 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
       selectedEdgeId,
       editingEdgeId,
       dragOverrides,
+      dropTargetId,
       resizeOverrides,
       onResizeHandlePointerDown,
       onEditorCommit,
@@ -450,6 +458,12 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
         ? renderNodeMap.get(pendingEdge.hoveredTargetId) ?? null
         : null
 
+    // Drop-on-node target lookup (sibling of edge-create's pendingTargetNode).
+    // Resolved off the post-override `renderNodeMap` so the halo tracks the
+    // node correctly even if the consumer's drag/resize overrides have moved it.
+    const dropTargetNode =
+      dropTargetId ? renderNodeMap.get(dropTargetId) ?? null : null
+
     // Compute edge editor anchor (midpoint of the edge being edited)
     const editingEdge = editingEdgeId
       ? edges.find((e) => e.id === editingEdgeId) ?? null
@@ -573,6 +587,29 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
               stroke={theme.node.labelColor}
               strokeWidth={2}
               opacity={0.85}
+              pointerEvents="none"
+            />
+          )}
+
+          {/* Target highlight (halo) for the currently-hovered drop target
+              during a node-on-node drop drag. Drawn with a dashed stroke
+              (vs. the solid stroke used by the edge-create highlight) so
+              the two interactions are visually distinguishable when both
+              are wired up — e.g. dragging a feature card while another
+              user is mid edge-create on the same node. */}
+          {dropTargetNode && (
+            <rect
+              className="system-canvas-drop-target system-canvas-node-drop-target"
+              x={dropTargetNode.x - 4}
+              y={dropTargetNode.y - 4}
+              width={dropTargetNode.width + 8}
+              height={dropTargetNode.height + 8}
+              rx={dropTargetNode.resolvedCornerRadius + 4}
+              fill="none"
+              stroke={theme.node.labelColor}
+              strokeWidth={2}
+              strokeDasharray="6 4"
+              opacity={0.9}
               pointerEvents="none"
             />
           )}
