@@ -32,8 +32,8 @@ interface NodeContextMenuOverlayProps {
 }
 
 /** Approximate menu width — only used for off-right-edge clamping. */
-const ESTIMATED_MENU_WIDTH = 220
-const MIN_MENU_WIDTH = 180
+const ESTIMATED_MENU_WIDTH = 200
+const MIN_MENU_WIDTH = 160
 const VIEWPORT_MARGIN = 8
 
 /**
@@ -119,6 +119,12 @@ export function NodeContextMenuOverlay({
 
   const matchCtx: NodeContextMenuMatchContext = { canvasRef: state.canvasRef }
 
+  // Only reserve space for an icon column when at least one item in the
+  // open menu actually has an icon. A single-item, no-icon menu like
+  // "Promote to X…" should read as a tight pill, not a wide row with
+  // 14px of empty space on the left.
+  const anyIcon = state.items.some((item) => !!item.icon)
+
   return (
     <div
       ref={rootRef}
@@ -198,11 +204,13 @@ export function NodeContextMenuOverlay({
                   customIcons={theme.icons}
                 />
               </svg>
-            ) : (
-              // Spacer so labels align whether or not an icon is present.
+            ) : anyIcon ? (
+              // Only reserve a spacer when other items in the same menu
+              // do have icons — keeps labels vertically aligned in a
+              // mixed menu without padding lone-item menus.
               <span style={{ width: 14, flexShrink: 0 }} aria-hidden />
-            )}
-            <span style={{ flex: 1 }}>{item.label}</span>
+            ) : null}
+            <span>{item.label}</span>
           </div>
         )
       })}

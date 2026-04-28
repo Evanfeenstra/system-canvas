@@ -173,6 +173,8 @@ Right-clicking a node can surface a small library-rendered menu of consumer-defi
 
 Both fire on the same right-click — the declarative menu is the common case, the raw callback is the escape hatch (consumer-rendered submenus, async-loaded items, edge / canvas-background menus). When `nodeContextMenu` is set but no items match the right-clicked node, no menu opens (the right-click becomes a silent no-op apart from suppressing the browser default). The menu surface is themed via `theme.contextMenu: ContextMenuTheme` — every built-in theme ships a tuned palette; custom themes inherit `darkTheme.contextMenu` via `resolveTheme`.
 
+The `showcase` demo (`demo/src/main.tsx`'s `showcaseContextMenu`) is the live reference: status changers gated by `match.categories` with `disabled` reflecting the current state, a flip action gated by `match.when`, a universal "Copy id" item with no `match`, and a destructive "Delete node" item. Switch the demo to `?mode=showcase` and right-click any node to see the menu.
+
 ### Theme system
 
 Themes are plain objects implementing `CanvasTheme`. They control every visual aspect: background, grid, node styles, edge styles, group styles, breadcrumb styles, preset color mappings ("1"-"6"), and category definitions.

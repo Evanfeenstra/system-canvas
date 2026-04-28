@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { SystemCanvas, type SystemCanvasHandle } from 'system-canvas-react'
 import {
@@ -20,6 +20,7 @@ import type {
   CanvasTheme,
   CanvasNode,
   CanvasEdge,
+  NodeContextMenuConfig,
   NodeUpdate,
   EdgeUpdate,
 } from 'system-canvas'
@@ -303,6 +304,107 @@ function App() {
     [setActiveCanvases]
   )
 
+  // ---------------------------------------------------------------------
+  // Showcase-mode context menu
+  //
+  // Right-clicking a node in showcase mode opens a small floating menu
+  // with category-aware actions. Demonstrates every surface of the
+  // declarative `nodeContextMenu` API:
+  //   - `match.categories` — items scoped to specific categories
+  //   - `match.when` — predicates that read the node body
+  //   - `disabled` — items that show but can't be picked (e.g. "Mark OK"
+  //     on a card that's already OK)
+  //   - `destructive` — red-tinted items
+  //   - icons — looked up in the theme's `icons` map (or built-ins)
+  //
+  // Other demo modes don't pass `nodeContextMenu`, so right-clicks fall
+  // back to the browser's default behavior there. This keeps the
+  // showcase a focused reference rather than overloading every mode.
+  // ---------------------------------------------------------------------
+  const showcaseContextMenu = useMemo<NodeContextMenuConfig>(
+    () => ({
+      items: [
+        // Status changers — only on status-* cards, with `disabled` for
+        // the currently-active status so the menu doubles as a status
+        // indicator. Status is encoded in the category itself, so we
+        // patch `category` to swap.
+        {
+          id: 'mark-ok',
+          label: 'Mark OK',
+          match: { categories: ['status-ok', 'status-attn', 'status-risk'] },
+          disabled: (node) => node.category === 'status-ok',
+        },
+        {
+          id: 'mark-attn',
+          label: 'Mark Attention',
+          match: { categories: ['status-ok', 'status-attn', 'status-risk'] },
+          disabled: (node) => node.category === 'status-attn',
+        },
+        {
+          id: 'mark-risk',
+          label: 'Mark Risk',
+          match: { categories: ['status-ok', 'status-attn', 'status-risk'] },
+          disabled: (node) => node.category === 'status-risk',
+        },
+        // Note/decision conversion — flips between the two amber/violet
+        // free-floating callout flavors.
+        {
+          id: 'flip-callout',
+          label: 'Flip note ↔ decision',
+          match: {
+            when: (node) =>
+              node.category === 'note' || node.category === 'decision',
+          },
+        },
+        // Universal: copy the node id to the clipboard. Always shown
+        // (no `match` predicate) — useful for any debugging session.
+        {
+          id: 'copy-id',
+          label: 'Copy node id',
+        },
+        // Destructive: delete the node. Wired to the same removeNode
+        // path the Delete key uses.
+        {
+          id: 'delete',
+          label: 'Delete node',
+          destructive: true,
+        },
+      ],
+      onSelect: (itemId, node, ctx) => {
+        switch (itemId) {
+          case 'mark-ok':
+            handleNodeUpdate(node.id, { category: 'status-ok' }, ctx.canvasRef ?? undefined)
+            break
+          case 'mark-attn':
+            handleNodeUpdate(node.id, { category: 'status-attn' }, ctx.canvasRef ?? undefined)
+            break
+          case 'mark-risk':
+            handleNodeUpdate(node.id, { category: 'status-risk' }, ctx.canvasRef ?? undefined)
+            break
+          case 'flip-callout': {
+            const next = node.category === 'note' ? 'decision' : 'note'
+            handleNodeUpdate(node.id, { category: next }, ctx.canvasRef ?? undefined)
+            break
+          }
+          case 'copy-id':
+            // Best-effort — the demo runs in modern browsers where the
+            // clipboard API is available; fall back to a console log
+            // when it isn't (e.g. insecure context).
+            if (typeof navigator !== 'undefined' && navigator.clipboard) {
+              void navigator.clipboard.writeText(node.id)
+            } else {
+              console.log('node id:', node.id)
+            }
+            break
+          case 'delete':
+            handleNodeDelete(node.id, ctx.canvasRef ?? undefined)
+            break
+        }
+      },
+    }),
+    [handleNodeUpdate, handleNodeDelete]
+  )
+
   return (
     <div style={{ width: '100vw', height: '100vh', position: 'relative' }}>
       {/* Theme / controls bar */}
@@ -461,6 +563,11 @@ function App() {
         onEdgeAdd={handleEdgeAdd}
         onEdgeUpdate={handleEdgeUpdate}
         onEdgeDelete={handleEdgeDelete}
+        // Right-click menu — only in showcase mode, where it has a
+        // category-aware item set wired up. Other modes get the
+        // browser's default right-click behavior so we don't have to
+        // invent menus for every demo.
+        nodeContextMenu={mode === 'showcase' ? showcaseContextMenu : undefined}
         onNodeClick={(node: CanvasNode) => {
           console.log('Node clicked:', node.id)
         }}
