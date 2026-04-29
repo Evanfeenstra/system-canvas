@@ -122,6 +122,35 @@ export interface SystemCanvasProps {
     patch: NodeUpdate,
     canvasRef: string | undefined
   ) => void
+  /**
+   * Batched node-update callback. When provided, wins over
+   * `onNodeUpdate` for drag commits — fires **once per drag-end** with
+   * every moved node, even for a group drag carrying many children.
+   *
+   * The motivating problem: consumers that mirror React state into a
+   * ref (the common `someRef.current = state` via `useEffect` pattern,
+   * needed when callbacks must read the latest state synchronously)
+   * cannot observe per-call mutations between synchronous calls,
+   * because the `useEffect` mirror has not yet run. The library used
+   * to fire `onNodeUpdate` once per moved node in a synchronous loop;
+   * such a consumer would read the same stale state for every call,
+   * each `setState` would overwrite the previous one, and only the
+   * last node in the iteration would actually move. Visible bug:
+   * dragging a group of N nodes leaves N-1 nodes snapping back to
+   * their pre-drag positions on release.
+   *
+   * Wire this callback if your `onNodeUpdate` consumer reads state
+   * through a `useEffect`-mirrored ref. If you can read state
+   * synchronously (e.g. via `useReducer` or a Zustand store) the
+   * fallback per-node loop is fine and you don't need to opt in.
+   *
+   * Resize commits go through `onNodeUpdate` regardless — resize only
+   * ever moves one node, so batching is moot.
+   */
+  onNodesUpdate?: (
+    updates: { id: string; patch: NodeUpdate }[],
+    canvasRef: string | undefined
+  ) => void
   onNodeDelete?: (nodeId: string, canvasRef: string | undefined) => void
   onEdgeUpdate?: (
     edgeId: string,
@@ -321,6 +350,7 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
       editable = false,
       onNodeAdd,
       onNodeUpdate,
+      onNodesUpdate,
       onNodeDelete,
       onEdgeUpdate,
       onEdgeDelete,
@@ -603,38 +633,85 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
     []
   )
 
-  // Drag. If snapToLanes is on and the canvas has lanes, snap the committed
-  // x and/or y so the node is centered within its column/row. The node's
-  // resolved width/height (from `nodesRef`) is fed to `snapToLane` so the
-  // snap accounts for node size — otherwise the node's top-left would
-  // align to the lane's start edge, visually jumping to the lane's corner.
-  const commitDrag = useCallback(
-    (id: string, patch: NodeUpdate) => {
+  // Per-node commit. Used by resize (which only ever moves a single
+  // node) and as the fallback path in `commitDragBatch` when the
+  // consumer hasn't provided `onNodesUpdate`.
+  //
+  // If snapToLanes is on and the canvas has lanes, snap the committed
+  // x and/or y so the node is centered within its column/row. The
+  // node's resolved width/height (from `nodesRef`) is fed to
+  // `snapToLane` so the snap accounts for node size — otherwise the
+  // node's top-left would align to the lane's start edge, visually
+  // jumping to the lane's corner.
+  const applyLaneSnap = useCallback(
+    (id: string, patch: NodeUpdate): NodeUpdate => {
+      if (!snapToLanes) return patch
+      const cols = currentCanvas.columns
+      const rows = currentCanvas.rows
+      const node = nodesRef.current.find((n) => n.id === id)
       let final = patch
-      if (snapToLanes) {
-        const cols = currentCanvas.columns
-        const rows = currentCanvas.rows
-        const node = nodesRef.current.find((n) => n.id === id)
-        const nx = patch.x
-        const ny = patch.y
-        if (cols && cols.length > 0 && nx != null) {
-          const snapped = snapToLane(nx, cols, {
-            edge: 'center',
-            size: node?.width ?? 0,
-          })
-          final = { ...final, x: Math.round(snapped) }
-        }
-        if (rows && rows.length > 0 && ny != null) {
-          const snapped = snapToLane(ny, rows, {
-            edge: 'center',
-            size: node?.height ?? 0,
-          })
-          final = { ...final, y: Math.round(snapped) }
-        }
+      const nx = patch.x
+      const ny = patch.y
+      if (cols && cols.length > 0 && nx != null) {
+        const snapped = snapToLane(nx, cols, {
+          edge: 'center',
+          size: node?.width ?? 0,
+        })
+        final = { ...final, x: Math.round(snapped) }
       }
-      onNodeUpdate?.(id, final, currentCanvasRef)
+      if (rows && rows.length > 0 && ny != null) {
+        const snapped = snapToLane(ny, rows, {
+          edge: 'center',
+          size: node?.height ?? 0,
+        })
+        final = { ...final, y: Math.round(snapped) }
+      }
+      return final
     },
-    [onNodeUpdate, currentCanvasRef, snapToLanes, currentCanvas.columns, currentCanvas.rows]
+    [snapToLanes, currentCanvas.columns, currentCanvas.rows]
+  )
+
+  const commitResize = useCallback(
+    (id: string, patch: NodeUpdate) => {
+      onNodeUpdate?.(id, applyLaneSnap(id, patch), currentCanvasRef)
+    },
+    [onNodeUpdate, currentCanvasRef, applyLaneSnap]
+  )
+
+  // Batched drag commit. Fires once per drag-end with every moved
+  // node — for a normal node drag that's a single-entry array, for a
+  // group drag it's the group plus every spatially-contained child.
+  //
+  // Why batch: consumers commonly mirror React state into refs via
+  // `useEffect` so callbacks can read "current" state synchronously.
+  // The mirror runs *after* React commits, so a synchronous loop of
+  // per-node `onNodeUpdate` calls all read the same stale state; only
+  // the last call's mutation survives because each iteration overwrites
+  // the previous one's `setState`. The visible bug: drag a group, every
+  // node snaps back except the last one in the iteration order. Batching
+  // lets the consumer apply every move against one starting state in a
+  // single transaction.
+  //
+  // When `onNodesUpdate` is provided, it wins. Otherwise we fall back
+  // to N `onNodeUpdate` calls so old consumers keep working — they just
+  // need to ensure their state reads are synchronous for groups to
+  // commit atomically.
+  const commitDragBatch = useCallback(
+    (updates: { id: string; patch: NodeUpdate }[]) => {
+      const final = updates.map((u) => ({
+        id: u.id,
+        patch: applyLaneSnap(u.id, u.patch),
+      }))
+      if (onNodesUpdate) {
+        onNodesUpdate(final, currentCanvasRef)
+        return
+      }
+      if (!onNodeUpdate) return
+      for (const { id, patch } of final) {
+        onNodeUpdate(id, patch, currentCanvasRef)
+      }
+    },
+    [onNodeUpdate, onNodesUpdate, currentCanvasRef, applyLaneSnap]
   )
 
   // Proxy ref pointing at the SVG element exposed by the viewport handle.
@@ -659,7 +736,7 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
   } = useNodeDrag({
     viewport: viewportStateRef,
     nodesRef,
-    onCommit: commitDrag,
+    onCommit: commitDragBatch,
     svgRef: svgProxyRef,
     canDropNodeOn,
     onNodeDrop: handleNodeDrop,
@@ -668,7 +745,7 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
   const { resizeOverrides, onHandlePointerDown: onResizeHandlePointerDown } =
     useNodeResize({
       viewport: viewportStateRef,
-      onCommit: commitDrag,
+      onCommit: commitResize,
     })
 
   // Selected node with live drag/resize overrides applied — used to position

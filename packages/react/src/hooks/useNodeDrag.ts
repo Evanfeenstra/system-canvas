@@ -7,13 +7,31 @@ import type {
 } from 'system-canvas'
 import { getGroupChildren, screenToCanvas } from 'system-canvas'
 
+/** A single moved node's id and the patch (x/y) to apply to it. */
+export interface NodeDragUpdate {
+  id: string
+  patch: NodeUpdate
+}
+
 interface UseNodeDragOptions {
   /** Current viewport state ref — drag uses viewport.zoom to convert deltas */
   viewport: React.RefObject<ViewportState>
   /** All currently-resolved nodes (used to find group children at drag start) */
   nodesRef: React.RefObject<ResolvedNode[]>
-  /** Called once per moved node when drag ends */
-  onCommit: (id: string, patch: NodeUpdate) => void
+  /**
+   * Called once per drag-end with **all** moved nodes batched into a
+   * single array. For a normal node drag this is a single-entry array;
+   * for a group drag it's the group plus every spatially-contained
+   * child the library carried along.
+   *
+   * Batching matters: consumers that read state synchronously inside
+   * the callback (e.g. via `someRef.current` mirrored from React state
+   * via `useEffect`) cannot observe per-call mutations because the
+   * `useEffect` mirror has not yet run between synchronous calls. A
+   * single batched commit lets the consumer apply every move against
+   * the same starting state in one transaction.
+   */
+  onCommit: (updates: NodeDragUpdate[]) => void
 
   /**
    * Optional ref to the SVG element. Required when drop-on-node detection
@@ -233,8 +251,12 @@ export function useNodeDrag(options: UseNodeDragOptions): UseNodeDragResult {
 
       if (commit && movedRef.current) {
         const overrides = Array.from(dragOverridesRef.current.entries())
-        for (const [id, pos] of overrides) {
-          onCommit(id, { x: Math.round(pos.x), y: Math.round(pos.y) })
+        if (overrides.length > 0) {
+          const updates: NodeDragUpdate[] = overrides.map(([id, pos]) => ({
+            id,
+            patch: { x: Math.round(pos.x), y: Math.round(pos.y) },
+          }))
+          onCommit(updates)
         }
       }
 
