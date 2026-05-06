@@ -12,6 +12,7 @@ import type {
   CanvasData,
   CanvasNode,
   CanvasEdge,
+  CanvasSelection,
   CanvasTheme,
   EdgeStyle,
   ViewportState,
@@ -95,6 +96,33 @@ export interface SystemCanvasProps {
   onEdgeClick?: (edge: CanvasEdge) => void
   onEdgeDoubleClick?: (edge: CanvasEdge) => void
   onContextMenu?: (event: ContextMenuEvent) => void
+
+  /**
+   * Fires whenever the library's internal selection state changes.
+   *
+   * The library tracks at most one selected entity at a time — a node
+   * OR an edge OR nothing. Use this single callback in preference to
+   * inferring deselection from `onNodeClick` / `onEdgeClick` / nav
+   * events: those fire on activation only, while `onSelectionChange`
+   * fires on every actual change including deactivation. The covered
+   * paths today:
+   *
+   *   - User clicks a node               → `{ kind: 'node', node, canvasRef }`
+   *   - User clicks an edge              → `{ kind: 'edge', edge, canvasRef }`
+   *   - User clicks the canvas background → `null`
+   *   - User presses Escape              → `null`
+   *   - User presses Delete/Backspace    → `null` (after the delete callback)
+   *   - User navigates to another canvas → `null`
+   *   - User toggles `editable` off      → `null`
+   *   - Selected entity disappears from the canvas data → `null`
+   *
+   * Atomic: when one click swaps the selection (e.g. node → edge),
+   * the callback fires once with the final state, never with an
+   * intermediate `null`. Selection is editable-only — non-editable
+   * canvases never select anything, so this callback emits at most
+   * a trailing `null` when `editable` flips off.
+   */
+  onSelectionChange?: (selection: CanvasSelection) => void
 
   /**
    * Declarative right-click menu for nodes. When provided, the library
@@ -346,6 +374,7 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
       onEdgeClick,
       onEdgeDoubleClick,
       onContextMenu,
+      onSelectionChange,
       nodeContextMenu,
       editable = false,
       onNodeAdd,
@@ -604,6 +633,73 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
     setSelectedEdgeId(null)
     setEditingEdgeId(null)
   }, [currentCanvasRef])
+
+  // Unified selection-change emission. Watches both id slots and emits
+  // a single `CanvasSelection | null` to the consumer whenever the
+  // *identity* of the resolved selection changes. Wiring it as an
+  // effect (rather than at every individual `setSelected*` call site)
+  // catches every mutation path automatically — node click, edge
+  // click, canvas-background click, Escape, Delete, navigation
+  // effect, NodeToolbar delete, any future setter — and gives us
+  // atomicity for free: when a click swaps node→edge selection, both
+  // `setSelected` calls land in one commit and the effect runs once
+  // with the final state, never with an intermediate `null`. We
+  // resolve the id to its CanvasNode / CanvasEdge here, so a stale
+  // selection (consumer mutated `canvas` to remove the selected
+  // entity) collapses to `null` rather than leaking a dangling id.
+  //
+  // Suppression: we depend on `nodeMap` and `edges`, which change on
+  // every canvas mutation. To avoid spurious re-emits when the user's
+  // selection is unchanged but some unrelated node moved, we track
+  // the last-emitted (kind, id, canvasRef) tuple and skip the
+  // callback when it matches. The resolved CanvasNode / CanvasEdge
+  // *object identity* may change across renders (resolveCanvas
+  // produces fresh objects), so identity-equality on the payload
+  // wouldn't work — we compare on the durable (kind, id) instead.
+  //
+  // The callback is intentionally NOT in the dep list — re-firing on
+  // every render just because the consumer didn't memoize their
+  // handler would be a footgun. We capture it via a ref instead.
+  const onSelectionChangeRef = useRef(onSelectionChange)
+  useEffect(() => {
+    onSelectionChangeRef.current = onSelectionChange
+  }, [onSelectionChange])
+
+  const lastEmittedSelectionRef = useRef<{
+    kind: 'node' | 'edge' | null
+    id: string | null
+    canvasRef: string | undefined
+  }>({ kind: null, id: null, canvasRef: undefined })
+
+  useEffect(() => {
+    const cb = onSelectionChangeRef.current
+    let next: CanvasSelection = null
+    if (selectedId) {
+      const node = nodeMap.get(selectedId)
+      if (node) next = { kind: 'node', node, canvasRef: currentCanvasRef }
+    }
+    if (!next && selectedEdgeId) {
+      const edge = edges.find((e) => e.id === selectedEdgeId)
+      if (edge) next = { kind: 'edge', edge, canvasRef: currentCanvasRef }
+    }
+    const last = lastEmittedSelectionRef.current
+    const nextKind = next?.kind ?? null
+    const nextId = next ? (next.kind === 'node' ? next.node.id : next.edge.id) : null
+    const nextRef = next?.canvasRef
+    if (
+      last.kind === nextKind &&
+      last.id === nextId &&
+      last.canvasRef === nextRef
+    ) {
+      return
+    }
+    lastEmittedSelectionRef.current = {
+      kind: nextKind,
+      id: nextId,
+      canvasRef: nextRef,
+    }
+    cb?.(next)
+  }, [selectedId, selectedEdgeId, currentCanvasRef, nodeMap, edges])
 
   // Container size — tracked so the lane-header overlay can size itself.
   const containerRef = useRef<HTMLDivElement | null>(null)

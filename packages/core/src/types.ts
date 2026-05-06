@@ -789,6 +789,30 @@ export interface BoundingBox {
 // Component prop types (used by system-canvas-react)
 // ---------------------------------------------------------------------------
 
+/**
+ * Unified selection state surfaced to consumers via `onSelectionChange`.
+ *
+ * The library tracks one selection at a time — a single node OR a single
+ * edge OR nothing. Clicking one kind clears the other (handled inside
+ * `useCanvasInteraction`), so consumers never observe a "both selected"
+ * state. Use this single callback in preference to inferring deselection
+ * from peripheral events (`onNodeClick`, `onEdgeClick`, `onNavigate`):
+ * those fire on activation; `onSelectionChange` fires on every actual
+ * change to the selection (activation OR deactivation), including
+ * background-click deselect, Escape, navigation, and post-delete clears.
+ *
+ * `canvasRef` matches the rest of the library's callbacks: the ref of the
+ * canvas the selected entity lives on, `undefined` for the root canvas.
+ *
+ * Selection is editable-only — non-editable canvases never select
+ * anything, so consumers receive at most a single trailing `null` if
+ * they toggle `editable` off while something was selected.
+ */
+export type CanvasSelection =
+  | { kind: 'node'; node: CanvasNode; canvasRef: string | undefined }
+  | { kind: 'edge'; edge: CanvasEdge; canvasRef: string | undefined }
+  | null
+
 export interface ContextMenuEvent {
   type: 'node' | 'edge' | 'canvas'
   target?: CanvasNode | CanvasEdge

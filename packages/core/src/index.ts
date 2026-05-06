@@ -28,6 +28,7 @@ export type {
   BreadcrumbEntry,
   BoundingBox,
   ContextMenuEvent,
+  CanvasSelection,
   NodeContextMenuItem,
   NodeContextMenuConfig,
   NodeContextMenuMatchContext,
