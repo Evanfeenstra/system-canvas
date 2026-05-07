@@ -153,6 +153,7 @@ export const rootCanvas: CanvasData = {
       width: 170,
       height: 60,
       color: '3',
+      ref: 'canvas:monitoring',
     },
     {
       id: 'ci-cd',
@@ -562,6 +563,184 @@ export const k8sCanvas: CanvasData = {
 }
 
 /**
+ * Sub-canvas: Monitoring stack (Prometheus + Grafana)
+ *
+ * Intentionally vertically adjacent to the k8s sub-canvas on the root —
+ * useful for verifying the zoom-navigation tie-breaking fix (closest node
+ * to viewport center wins when two stacked ref-bearing nodes both cross
+ * `enterThreshold` in the same frame).
+ */
+export const monitoringCanvas: CanvasData = {
+  nodes: [
+    {
+      id: 'mon-collect',
+      type: 'group',
+      x: -20,
+      y: -50,
+      width: 360,
+      height: 320,
+      label: 'Collection',
+      color: '3',
+    },
+    {
+      id: 'mon-store',
+      type: 'group',
+      x: 360,
+      y: -50,
+      width: 280,
+      height: 320,
+      label: 'Storage',
+      color: '5',
+    },
+    {
+      id: 'mon-visualize',
+      type: 'group',
+      x: 660,
+      y: -50,
+      width: 300,
+      height: 320,
+      label: 'Visualization & Alerting',
+      color: '4',
+    },
+
+    // Collection
+    {
+      id: 'node-exporter',
+      type: 'text',
+      text: 'Node Exporter\nHost metrics',
+      x: 0,
+      y: 0,
+      width: 150,
+      height: 55,
+      color: '3',
+    },
+    {
+      id: 'kube-state',
+      type: 'text',
+      text: 'kube-state-metrics\nCluster metrics',
+      x: 170,
+      y: 0,
+      width: 150,
+      height: 55,
+      color: '3',
+    },
+    {
+      id: 'app-metrics',
+      type: 'text',
+      text: 'App /metrics\nPrometheus client',
+      x: 0,
+      y: 90,
+      width: 150,
+      height: 55,
+      color: '4',
+    },
+    {
+      id: 'otel-collector',
+      type: 'text',
+      text: 'OTel Collector\nTraces + logs',
+      x: 170,
+      y: 90,
+      width: 150,
+      height: 55,
+      color: '2',
+    },
+    {
+      id: 'scrape-config',
+      type: 'file',
+      file: 'monitoring/scrape.yaml',
+      x: 85,
+      y: 200,
+      width: 180,
+      height: 40,
+      color: '3',
+    },
+
+    // Storage
+    {
+      id: 'prometheus',
+      type: 'text',
+      text: 'Prometheus\nTSDB scraper',
+      x: 380,
+      y: 0,
+      width: 160,
+      height: 55,
+      color: '5',
+    },
+    {
+      id: 'thanos',
+      type: 'text',
+      text: 'Thanos\nLong-term storage',
+      x: 380,
+      y: 90,
+      width: 160,
+      height: 55,
+      color: '5',
+    },
+    {
+      id: 'loki',
+      type: 'text',
+      text: 'Loki\nLog store',
+      x: 380,
+      y: 180,
+      width: 160,
+      height: 55,
+      color: '6',
+    },
+
+    // Visualization & alerting
+    {
+      id: 'grafana',
+      type: 'text',
+      text: 'Grafana\nDashboards',
+      x: 680,
+      y: 0,
+      width: 150,
+      height: 55,
+      color: '4',
+    },
+    {
+      id: 'alertmanager',
+      type: 'text',
+      text: 'Alertmanager\nRouting + dedup',
+      x: 680,
+      y: 90,
+      width: 150,
+      height: 55,
+      color: '1',
+    },
+    {
+      id: 'oncall',
+      type: 'text',
+      text: 'On-call team\n2 rotations',
+      x: 680,
+      y: 180,
+      width: 150,
+      height: 45,
+    },
+  ],
+  edges: [
+    // Collection -> Prometheus
+    { id: 'mon-e1', fromNode: 'node-exporter', fromSide: 'right', toNode: 'prometheus', toSide: 'left', label: 'scrape' },
+    { id: 'mon-e2', fromNode: 'kube-state', fromSide: 'right', toNode: 'prometheus', toSide: 'left' },
+    { id: 'mon-e3', fromNode: 'app-metrics', fromSide: 'right', toNode: 'prometheus', toSide: 'left', label: 'scrape' },
+    { id: 'mon-e4', fromNode: 'otel-collector', fromSide: 'right', toNode: 'loki', toSide: 'left', label: 'logs' },
+    { id: 'mon-e5', fromNode: 'scrape-config', fromSide: 'right', toNode: 'prometheus', toSide: 'left', label: 'config' },
+
+    // Storage -> Storage
+    { id: 'mon-e6', fromNode: 'prometheus', fromSide: 'bottom', toNode: 'thanos', toSide: 'top', label: 'remote write' },
+
+    // Storage -> Visualization
+    { id: 'mon-e7', fromNode: 'prometheus', fromSide: 'right', toNode: 'grafana', toSide: 'left', label: 'query' },
+    { id: 'mon-e8', fromNode: 'thanos', fromSide: 'right', toNode: 'grafana', toSide: 'left', label: 'query' },
+    { id: 'mon-e9', fromNode: 'loki', fromSide: 'right', toNode: 'grafana', toSide: 'left', label: 'logs' },
+    { id: 'mon-e10', fromNode: 'prometheus', fromSide: 'right', toNode: 'alertmanager', toSide: 'left', label: 'rules fire' },
+
+    // Alerting fan-out
+    { id: 'mon-e11', fromNode: 'alertmanager', fromSide: 'bottom', toNode: 'oncall', toSide: 'top', label: 'page' },
+  ],
+}
+
+/**
  * Sub-canvas: User Service internals
  */
 export const userServiceCanvas: CanvasData = {
@@ -886,6 +1065,7 @@ export const sandboxCanvas: CanvasData = {
 export const canvasMap: Record<string, CanvasData> = {
   'canvas:api-gateway': apiGatewayCanvas,
   'canvas:k8s': k8sCanvas,
+  'canvas:monitoring': monitoringCanvas,
   'canvas:user-service': userServiceCanvas,
   'canvas:pod-worker': podWorkerCanvas,
   'canvas:sandbox': sandboxCanvas,

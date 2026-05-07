@@ -241,6 +241,19 @@ export function useZoomNavigation(options: UseZoomNavigationOptions) {
       if (!size) return
 
       // --- Enter detection: any ref-bearing node filling the viewport ---
+      // Two-pass: first collect every on-screen ref-bearing node that
+      // crosses prefetch/enter thresholds, then commit on the candidate
+      // whose on-screen center is closest to the viewport center. Without
+      // this disambiguation, two vertically-stacked nodes both passing
+      // `enterThreshold` in the same frame would resolve to whichever
+      // appears first in the array — causing a zoom-in on the bottom node
+      // to erroneously navigate into the top node (or vice versa).
+      const viewportCenterX = size.width / 2
+      const viewportCenterY = size.height / 2
+      let bestCandidate:
+        | { node: ResolvedNode; screen: Rect; distSq: number }
+        | null = null
+
       for (const n of nodes) {
         if (!n.ref) continue
         const screen = canvasRectToScreenRect(
@@ -275,55 +288,64 @@ export function useZoomNavigation(options: UseZoomNavigationOptions) {
         }
 
         if (fillFraction >= config.enterThreshold) {
-          // Resolve the sub-canvas synchronously from canvases map or
-          // pre-fetch cache. If not available, skip (discrete nav will
-          // take over via normal maxZoom pinning).
-          const childData =
-            canvases?.[n.ref] ?? prefetchRef.current.get(n.ref)?.data
-          if (!childData) {
-            prefetch(n.ref)
-            continue
+          const dx = centerX - viewportCenterX
+          const dy = centerY - viewportCenterY
+          const distSq = dx * dx + dy * dy
+          if (!bestCandidate || distSq < bestCandidate.distSq) {
+            bestCandidate = { node: n, screen, distSq }
           }
+        }
+      }
 
+      if (bestCandidate) {
+        const n = bestCandidate.node
+        const screen = bestCandidate.screen
+        const ref = n.ref as string
+
+        // Resolve the sub-canvas synchronously from canvases map or
+        // pre-fetch cache. If not available, kick off a prefetch and
+        // bail (discrete nav will take over via normal maxZoom pinning).
+        const childData =
+          canvases?.[ref] ?? prefetchRef.current.get(ref)?.data
+        if (!childData) {
+          prefetch(ref)
+        } else {
           // Resolve child canvas so we can compute its bounding box.
           const resolved = resolveCanvas(childData, theme)
-          if (resolved.nodes.length === 0) continue
+          if (resolved.nodes.length > 0) {
+            const bounds = computeBoundingBox(resolved.nodes)
+            // Target: fit child bbox into the parent node's on-screen
+            // rect, expanded by `landingScale` around its center.
+            // Expanding makes the child content land larger than the
+            // parent node itself, while still anchored to where the
+            // parent node was.
+            const targetRect = expandRect(screen, config.landingScale)
+            // Inset padding (proportional to the smaller dimension) so
+            // the child content has breathing room inside the target
+            // rect instead of hugging its edges.
+            const landingPad =
+              Math.min(targetRect.width, targetRect.height) *
+              config.landingPadding
+            let targetTransform = fitBoundsIntoRect(
+              bounds,
+              targetRect,
+              landingPad
+            )
+            // Nudge the transform so the child bbox stays fully on
+            // screen (with a small margin). This preserves the size and
+            // only shifts the translation when the anchored position
+            // would put content off the edge of the viewport.
+            targetTransform = clampTransformToViewport(
+              targetTransform,
+              bounds,
+              size,
+              16
+            )
 
-          const bounds = computeBoundingBox(resolved.nodes)
-          // Target: fit child bbox into the parent node's on-screen rect,
-          // expanded by `landingScale` around its center. Expanding makes
-          // the child content land larger than the parent node itself,
-          // while still anchored to where the parent node was.
-          const targetRect = expandRect(screen, config.landingScale)
-          // Inset padding (proportional to the smaller dimension) so the
-          // child content has breathing room inside the target rect
-          // instead of hugging its edges.
-          const landingPad =
-            Math.min(targetRect.width, targetRect.height) *
-            config.landingPadding
-          let targetTransform = fitBoundsIntoRect(
-            bounds,
-            targetRect,
-            landingPad
-          )
-          // Nudge the transform so the child bbox stays fully on screen
-          // (with a small margin). This preserves the size and only shifts
-          // the translation when the anchored position would put content
-          // off the edge of the viewport.
-          targetTransform = clampTransformToViewport(
-            targetTransform,
-            bounds,
-            size,
-            16
-          )
-
-          committingRef.current = true
-          // Convert the ResolvedNode back to a plain CanvasNode-ish object
-          // with just id + ref (navigation only needs these + label for the
-          // breadcrumb). The caller treats n as a CanvasNode-compatible
-          // object.
-          onEnter(n, targetTransform)
-          return
+            committingRef.current = true
+            onEnter(n, targetTransform)
+            return
+          }
         }
       }
 
