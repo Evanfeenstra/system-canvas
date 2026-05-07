@@ -119,6 +119,20 @@ export function NodeToolbar({
 
   // Measure the toolbar's actual screen size so we can center it over the
   // node and flip it below when near the top of the viewport.
+  //
+  // Two safety measures matter here:
+  //   1. **Empty deps array** so the effect runs once on mount, not after
+  //      every render. Without it, every `setSize` triggers a re-render
+  //      which re-runs the effect which re-measures and `setSize`s again
+  //      with a fresh `{ width, height }` object \u2014 React's `Object.is`
+  //      bail-out fails on object identity, so the loop never settles.
+  //      In dev React eventually throws "Maximum update depth exceeded";
+  //      in prod the warning is suppressed but the wasted work is real.
+  //   2. **Numeric bail-out inside `setSize`** so a `ResizeObserver` tick
+  //      that reports the same width/height (which happens on first
+  //      observe + every layout-relevant child mutation) doesn't trigger
+  //      a re-render. Functional updater form gives us the previous
+  //      value to compare against.
   const toolbarRef = useRef<HTMLDivElement | null>(null)
   const [size, setSize] = useState({ width: 0, height: 0 })
   useEffect(() => {
@@ -126,13 +140,17 @@ export function NodeToolbar({
     if (!el) return
     const update = () => {
       const r = el.getBoundingClientRect()
-      setSize({ width: r.width, height: r.height })
+      setSize((prev) =>
+        prev.width === r.width && prev.height === r.height
+          ? prev
+          : { width: r.width, height: r.height }
+      )
     }
     update()
     const ro = new ResizeObserver(update)
     ro.observe(el)
     return () => ro.disconnect()
-  })
+  }, [])
 
   // Resolve `left` from the anchor based on alignment. With 'center' the
   // toolbar's center sits over the anchor; with 'left' / 'right' the
