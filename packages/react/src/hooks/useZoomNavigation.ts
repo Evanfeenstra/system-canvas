@@ -40,10 +40,10 @@ export interface ZoomNavigationConfig {
   /**
    * Post-handoff, the child canvas is fit into the parent node's old
    * on-screen rect expanded by this factor around its center. A value of
-   * 1.0 means "exactly where the parent node was"; 1.2 means the child
-   * lands 20% larger than the parent node, centered on the same point.
+   * 1.0 means "exactly where the parent node was"; 1.3 means the child
+   * lands 30% larger than the parent node, centered on the same point.
    * The transform is then clamped so no child content falls outside the
-   * viewport. Default 1.2.
+   * viewport. Default 1.3.
    */
   landingScale?: number
   /**
@@ -204,6 +204,23 @@ export function useZoomNavigation(options: UseZoomNavigationOptions) {
   useEffect(() => {
     committingRef.current = false
   }, [currentCanvas])
+
+  // Arm exit detection only after the child canvas has, at some point
+  // since landing, filled at least `exitThreshold` of the viewport.
+  // Without this, a sub-canvas whose content is small relative to the
+  // parent node's on-screen rect (sparse initiative, single tiny node,
+  // etc.) lands already-below-threshold and the very next viewport
+  // change after handoff trips an immediate exit — the user clicks the
+  // ref icon, sees the child for one frame, then any zoom-in attempt
+  // (which generates a viewport-change event) bounces them back to the
+  // parent. Arming on first "above threshold" observation means a small
+  // child waits for a real zoom-in-then-out gesture before becoming
+  // exit-eligible; a normally-sized child arms on the first frame and
+  // behaves as before.
+  const exitArmedRef = useRef(false)
+  useEffect(() => {
+    exitArmedRef.current = false
+  }, [currentCanvas, parentFrame])
 
   // Most-recent pre-fetch in flight, keyed by ref to avoid duplicates.
   const prefetchRef = useRef<Map<string, PrefetchState>>(new Map())
@@ -366,6 +383,15 @@ export function useZoomNavigation(options: UseZoomNavigationOptions) {
           screen.width / size.width,
           screen.height / size.height
         )
+        // Arm exit detection only once the child has been observed
+        // filling at least `exitThreshold` of the viewport. See the
+        // comment on `exitArmedRef` for the why.
+        if (!exitArmedRef.current) {
+          if (fillFraction > config.exitThreshold) {
+            exitArmedRef.current = true
+          }
+          return
+        }
         if (fillFraction <= config.exitThreshold) {
           // Target on the parent canvas: the parent node rect should
           // appear at the current on-screen rect of the child canvas bbox.

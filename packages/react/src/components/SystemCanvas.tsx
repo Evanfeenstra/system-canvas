@@ -411,7 +411,7 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
       enterThreshold: 0.66,
       exitThreshold: 0.33,
       prefetchThreshold: 0.4,
-      landingScale: 1.2,
+      landingScale: 1.3,
       landingPadding: 0.08,
       fadeDuration: 216,
     }
