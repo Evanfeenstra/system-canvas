@@ -149,6 +149,14 @@ export interface ViewportHandle {
   ) => void
   getSvgElement: () => SVGSVGElement | null
   getViewport: () => ViewportState
+  /**
+   * Latest cursor position in screen-space relative to the SVG's top-left
+   * corner. Returns null when the pointer has left the SVG (or has never
+   * been observed — e.g. immediately after mount with no mouse movement).
+   * Used by zoom-navigation to anchor candidate selection on the cursor
+   * rather than the viewport center.
+   */
+  getCursorScreenPos: () => { x: number; y: number } | null
 }
 
 export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
@@ -261,6 +269,14 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
     // handle is shown. Null when no hover is active.
     const [hoveredSide, setHoveredSide] = useState<Side | null>(null)
 
+    // Latest cursor position in screen-space relative to the SVG's
+    // top-left corner. Updated on every pointermove, cleared on
+    // pointerleave. Read by zoom-navigation to anchor candidate selection
+    // on the cursor rather than the viewport center, so zooming toward a
+    // small ref-bearing node doesn't accidentally enter a larger
+    // ref-bearing node nearby.
+    const cursorPosRef = useRef<{ x: number; y: number } | null>(null)
+
     useImperativeHandle(ref, () => ({
       zoomToNode: (node, onComplete, options) => {
         navigatingRef.current = true
@@ -270,6 +286,7 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
       setTransform,
       getSvgElement: () => svgRef.current,
       getViewport: () => viewport.current ?? { x: 0, y: 0, zoom: 1 },
+      getCursorScreenPos: () => cursorPosRef.current,
     }))
 
     // Apply drag + resize overrides to nodes before rendering so edges route correctly.
@@ -377,16 +394,18 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
     // slightly outside the node rect) without losing hover.
     const handleSvgPointerMove = useCallback(
       (event: React.PointerEvent<SVGSVGElement>) => {
-        if (!edgeCreateEnabled) return
         const svg = svgRef.current
         if (!svg) return
         const rect = svg.getBoundingClientRect()
+        // Always record cursor position so zoom-navigation can use it,
+        // even when edge-create hover hit-testing is disabled.
+        const cursorScreenX = event.clientX - rect.left
+        const cursorScreenY = event.clientY - rect.top
+        cursorPosRef.current = { x: cursorScreenX, y: cursorScreenY }
+
+        if (!edgeCreateEnabled) return
         const vp = viewport.current ?? { x: 0, y: 0, zoom: 1 }
-        const { x, y } = screenToCanvas(
-          event.clientX - rect.left,
-          event.clientY - rect.top,
-          vp
-        )
+        const { x, y } = screenToCanvas(cursorScreenX, cursorScreenY, vp)
         const pad = HOVER_PADDING
         let hit: ResolvedNode | null = null
         for (let i = renderNodes.length - 1; i >= 0; i--) {
@@ -438,6 +457,7 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
     const handleSvgPointerLeave = useCallback(() => {
       setHoveredNodeId(null)
       setHoveredSide(null)
+      cursorPosRef.current = null
     }, [])
 
     // Node to show connection handles on: the hovered node, unless a drag

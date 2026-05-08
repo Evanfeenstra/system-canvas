@@ -988,6 +988,8 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
       const rect = svg.getBoundingClientRect()
       return { width: rect.width, height: rect.height }
     },
+    getCursorScreenPos: () =>
+      viewportHandleRef.current?.getCursorScreenPos() ?? null,
     onEnter: handleZoomEnter,
     onExit: handleZoomExit,
   })

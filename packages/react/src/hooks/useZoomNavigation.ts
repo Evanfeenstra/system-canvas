@@ -94,6 +94,23 @@ interface UseZoomNavigationOptions {
   /** Getter for the current viewport screen size. */
   getViewportSize: () => { width: number; height: number } | null
   /**
+   * Getter for the current cursor position in screen-space relative to
+   * the SVG's top-left corner. Returns null when no cursor has been
+   * observed (pointer hasn't entered the canvas, or has just left).
+   *
+   * Used to anchor enter-detection: when the cursor is over a
+   * ref-bearing node, only that node is eligible to enter — even if a
+   * larger nearby ref-bearing node has crossed `enterThreshold` first.
+   * Without this, zooming toward a small node "under" a larger one
+   * accidentally navigates into the larger node because it grows past
+   * the threshold sooner. When the cursor is absent, or sits over
+   * empty space / a non-ref node, falls back to today's
+   * "closest-to-viewport-center among threshold-crossers" behavior so a
+   * cursor parked over a Note-style leaf node doesn't block legitimate
+   * enter gestures on a nearby Initiative-style ref node.
+   */
+  getCursorScreenPos: () => { x: number; y: number } | null
+  /**
    * Called to commit a zoom-enter navigation. Receives the (resolved)
    * node being entered and the target viewport transform that must be
    * applied on the newly-loaded canvas to make the handoff seamless.
@@ -192,6 +209,7 @@ export function useZoomNavigation(options: UseZoomNavigationOptions) {
     onSeedCanvas,
     theme,
     getViewportSize,
+    getCursorScreenPos,
     onEnter,
     onExit,
   } = options
@@ -258,58 +276,133 @@ export function useZoomNavigation(options: UseZoomNavigationOptions) {
       if (!size) return
 
       // --- Enter detection: any ref-bearing node filling the viewport ---
-      // Two-pass: first collect every on-screen ref-bearing node that
-      // crosses prefetch/enter thresholds, then commit on the candidate
-      // whose on-screen center is closest to the viewport center. Without
-      // this disambiguation, two vertically-stacked nodes both passing
-      // `enterThreshold` in the same frame would resolve to whichever
-      // appears first in the array — causing a zoom-in on the bottom node
-      // to erroneously navigate into the top node (or vice versa).
+      //
+      // First pass: find a ref-bearing node whose on-screen rect contains
+      // the cursor (if a cursor position is available). When the user
+      // is zooming toward a specific node, the d3-zoom anchor is the
+      // cursor — not the viewport center — so the cursor is the most
+      // reliable signal for "which node did the user mean?". If a
+      // ref-bearing node is under the cursor, that node *exclusively*
+      // owns enter-detection: a larger ref-bearing node sitting above
+      // or below it will still grow past `enterThreshold` first, but we
+      // ignore it here so the gesture commits on the hovered node once
+      // it crosses the bar itself. Among nested ref-bearing nodes (rare,
+      // but possible), the smallest screen-area wins — that's the one
+      // the user is "deeper" into.
+      //
+      // Second pass (cursor over empty space / non-ref node / no
+      // cursor observed): collect every on-screen ref-bearing node that
+      // crosses thresholds and commit on the one whose center is closest
+      // to the viewport center. This preserves today's behavior for
+      // touchpad pinch with a stale pointer or cursor parked over a
+      // leaf node, where a nearby Initiative-style ref node should
+      // still legitimately enter.
+      const cursor = getCursorScreenPos()
       const viewportCenterX = size.width / 2
       const viewportCenterY = size.height / 2
+
+      // First pass: ref-bearing node under cursor (smallest wins for nesting).
+      let cursorNode:
+        | { node: ResolvedNode; screen: Rect; area: number }
+        | null = null
+      if (cursor) {
+        for (const n of nodes) {
+          if (!n.ref) continue
+          const screen = canvasRectToScreenRect(
+            { x: n.x, y: n.y, width: n.width, height: n.height },
+            vp
+          )
+          if (
+            cursor.x < screen.x ||
+            cursor.x > screen.x + screen.width ||
+            cursor.y < screen.y ||
+            cursor.y > screen.y + screen.height
+          ) {
+            continue
+          }
+          const area = screen.width * screen.height
+          if (!cursorNode || area < cursorNode.area) {
+            cursorNode = { node: n, screen, area }
+          }
+        }
+      }
+
       let bestCandidate:
         | { node: ResolvedNode; screen: Rect; distSq: number }
         | null = null
 
-      for (const n of nodes) {
-        if (!n.ref) continue
-        const screen = canvasRectToScreenRect(
-          { x: n.x, y: n.y, width: n.width, height: n.height },
-          vp
-        )
-
-        // The node must actually be on-screen — its center must lie
-        // inside the viewport. Without this check, any ref-bearing node
-        // grows with zoom and may pass the fill-fraction threshold even
-        // when it's entirely off to the side; the loop would then enter
-        // that node instead of the one the user is actually zooming on.
-        const centerX = screen.x + screen.width / 2
-        const centerY = screen.y + screen.height / 2
-        const centerOnScreen =
-          centerX >= 0 &&
-          centerX <= size.width &&
-          centerY >= 0 &&
-          centerY <= size.height
-        if (!centerOnScreen) continue
-
+      if (cursorNode) {
+        // Cursor-locked mode: only the hovered ref-node is eligible.
+        // Other ref-nodes still get prefetched so the handoff stays
+        // synchronous if the user pans away and zooms a different one.
+        const screen = cursorNode.screen
         const fillFraction = Math.max(
           screen.width / size.width,
           screen.height / size.height
         )
-
         if (
           fillFraction >= config.prefetchThreshold &&
-          fillFraction < config.enterThreshold
+          cursorNode.node.ref
         ) {
-          prefetch(n.ref)
+          prefetch(cursorNode.node.ref)
         }
-
         if (fillFraction >= config.enterThreshold) {
-          const dx = centerX - viewportCenterX
-          const dy = centerY - viewportCenterY
-          const distSq = dx * dx + dy * dy
-          if (!bestCandidate || distSq < bestCandidate.distSq) {
-            bestCandidate = { node: n, screen, distSq }
+          bestCandidate = { node: cursorNode.node, screen, distSq: 0 }
+        }
+        // Prefetch other on-screen ref-nodes that are warming up too.
+        for (const n of nodes) {
+          if (!n.ref) continue
+          if (n === cursorNode.node) continue
+          const s = canvasRectToScreenRect(
+            { x: n.x, y: n.y, width: n.width, height: n.height },
+            vp
+          )
+          const ff = Math.max(s.width / size.width, s.height / size.height)
+          if (ff >= config.prefetchThreshold) prefetch(n.ref)
+        }
+      } else {
+        // Fallback: closest-to-viewport-center among threshold-crossers.
+        for (const n of nodes) {
+          if (!n.ref) continue
+          const screen = canvasRectToScreenRect(
+            { x: n.x, y: n.y, width: n.width, height: n.height },
+            vp
+          )
+
+          // The node must actually be on-screen — its center must lie
+          // inside the viewport. Without this check, any ref-bearing
+          // node grows with zoom and may pass the fill-fraction
+          // threshold even when it's entirely off to the side; the
+          // loop would then enter that node instead of the one the
+          // user is actually zooming on.
+          const centerX = screen.x + screen.width / 2
+          const centerY = screen.y + screen.height / 2
+          const centerOnScreen =
+            centerX >= 0 &&
+            centerX <= size.width &&
+            centerY >= 0 &&
+            centerY <= size.height
+          if (!centerOnScreen) continue
+
+          const fillFraction = Math.max(
+            screen.width / size.width,
+            screen.height / size.height
+          )
+
+          if (
+            fillFraction >= config.prefetchThreshold &&
+            fillFraction < config.enterThreshold
+          ) {
+            prefetch(n.ref)
+          }
+
+          if (fillFraction >= config.enterThreshold) {
+            const dx = centerX - viewportCenterX
+            const dy = centerY - viewportCenterY
+            const distSq = dx * dx + dy * dy
+            if (!bestCandidate || distSq < bestCandidate.distSq) {
+              bestCandidate = { node: n, screen, distSq }
+            }
           }
         }
       }
@@ -427,6 +520,7 @@ export function useZoomNavigation(options: UseZoomNavigationOptions) {
       theme,
       config,
       getViewportSize,
+      getCursorScreenPos,
       prefetch,
       onEnter,
       onExit,
