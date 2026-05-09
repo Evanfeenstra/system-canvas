@@ -5,7 +5,12 @@ import type {
   ResolvedNode,
   CanvasTheme,
 } from 'system-canvas'
-import { getAtPath, setAtPath } from 'system-canvas'
+import {
+  computeReflowReservations,
+  getAtPath,
+  getCategorySlots,
+  setAtPath,
+} from 'system-canvas'
 
 interface NodeEditorProps {
   node: ResolvedNode
@@ -118,6 +123,17 @@ function SingleFieldEditor({
   const fontSize = theme.node.fontSize
   const padding = 8
 
+  // Mirror TextNode's display-alignment rule so the editor matches the
+  // committed appearance: when the category declares a header slot
+  // (i.e. `reservedTop > 0`), the node is a dashboard-style card whose
+  // label is left-aligned under the header. Otherwise plain `type: 'text'`
+  // nodes center (historical behavior); file/link/group always left-align.
+  const slots = getCategorySlots(node, theme)
+  const reservations = computeReflowReservations(node, theme, slots)
+  const hasHeader = reservations.top > 0
+  const textAlign: 'center' | 'left' =
+    node.type === 'text' && !hasHeader ? 'center' : 'left'
+
   const commonFieldStyle: React.CSSProperties = {
     width: '100%',
     height: '100%',
@@ -131,7 +147,7 @@ function SingleFieldEditor({
     borderRadius: node.resolvedCornerRadius,
     outline: 'none',
     resize: 'none',
-    textAlign: node.type === 'text' ? 'center' : 'left',
+    textAlign,
   }
 
   return (
