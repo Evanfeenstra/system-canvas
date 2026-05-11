@@ -44,6 +44,27 @@ const ACCENT = {
   decision: '#a78bfa',
   customer: '#22c55e',
   revenue: '#22c55e',
+  service: '#67e8f9',
+}
+
+/**
+ * Brand accent per service `customData.kind` — drives both the card's
+ * resolvedStroke (via the category accessor below) and the topLeft icon
+ * color (which inherits the stroke automatically). Same field used by
+ * a real hive integration; here we lean on the library's built-in icon
+ * names so the showcase is self-contained.
+ */
+const SERVICE_KINDS: Record<string, { icon: string; color: string }> = {
+  database: { icon: 'database', color: '#60a5fa' },
+  server: { icon: 'server', color: '#f59e0b' },
+  cloud: { icon: 'cloud', color: '#67e8f9' },
+  cog: { icon: 'cog', color: '#a78bfa' },
+  package: { icon: 'package', color: '#f472b6' },
+}
+
+function serviceMeta(node: CanvasNode): { icon: string; color: string } {
+  const kind = (node.customData?.kind as string | undefined) ?? 'cloud'
+  return SERVICE_KINDS[kind] ?? SERVICE_KINDS.cloud
 }
 
 /**
@@ -492,6 +513,46 @@ const revenueCategory: any = {
 }
 
 /**
+ * Service card — demonstrates `kind: 'icon'`. A single `service` category
+ * whose icon and accent color resolve from `customData.kind` against a
+ * small brand registry. No header kicker — the icon IS the visual ID, the
+ * body text is the user-typed service name. This is the canonical "one
+ * category, many platforms" pattern (Vercel / EC2 / Postgres / etc. in
+ * hive-style consumers — here we use the lib's built-in icon names so the
+ * showcase has no external deps).
+ *
+ * The category itself has a static stroke/fill (the service-cyan accent),
+ * but both the brand stripe on the left edge AND the topLeft icon use
+ * NodeAccessor values to look up the per-brand color from
+ * `customData.kind` at render time. Switching `customData.kind` re-paints
+ * stripe + icon in one shot, no category swap needed.
+ */
+const serviceCategory: any = {
+  ...baseCard,
+  defaultWidth: SMALL_W,
+  defaultHeight: SMALL_H,
+  type: 'text' as const,
+  stroke: hexAlpha(ACCENT.service, 0.45),
+  fill: hexAlpha(ACCENT.service, 0.05),
+  slots: {
+    // Brand stripe down the left edge. Color resolves per-node from the
+    // brand registry — distinct accent for each `customData.kind`.
+    leftEdge: {
+      kind: 'color',
+      extent: 'full',
+      color: (ctx: SlotContext) => serviceMeta(ctx.node).color,
+    },
+    // Icon next to the title. Both `name` and `color` are accessors —
+    // they switch as `customData.kind` changes.
+    topLeft: {
+      kind: 'icon',
+      name: (ctx: SlotContext) => serviceMeta(ctx.node).icon,
+      color: (ctx: SlotContext) => serviceMeta(ctx.node).color,
+    },
+  },
+}
+
+/**
  * Note / decision card — amber or purple kicker, tinted background.
  */
 function accentNote(color: string, kicker: string): any {
@@ -561,6 +622,7 @@ export const showcaseTheme: CanvasTheme = resolveTheme(
       decision: accentNote(ACCENT.decision, 'DECISION'),
       customer: customerCategory,
       revenue: revenueCategory,
+      service: serviceCategory,
     },
     toolbarAlign: 'left',
   },
@@ -578,6 +640,7 @@ const ROW_Y = {
   initiatives: 380,
   secondary: 560,
   footer: 760,
+  services: 900,
 }
 
 const teams: Array<{
@@ -823,6 +886,39 @@ footerItems.forEach((it, i) => {
       delta: it.delta,
       period: it.period,
     },
+  })
+})
+
+// --- Services row: kind: 'icon' demo ---
+// Five service cards, each driven by a distinct `customData.kind`. The
+// brand icon, the brand color on the leftEdge stripe, and the icon color
+// are all resolved per-node from the SERVICE_KINDS registry — same
+// category for all five cards. Try the toolbar (select a service card)
+// or double-click → multi-field editor to see the swatch / pill / type
+// pattern at work; here we just show that one category renders five
+// visually distinct cards via accessor-driven slots.
+const services: Array<{ id: string; title: string; kind: string }> = [
+  { id: 'svc-db', title: 'Postgres primary', kind: 'database' },
+  { id: 'svc-srv', title: 'API gateway', kind: 'server' },
+  { id: 'svc-cloud', title: 'CDN / edge', kind: 'cloud' },
+  { id: 'svc-cog', title: 'Workers', kind: 'cog' },
+  { id: 'svc-pkg', title: 'Build artifacts', kind: 'package' },
+]
+const SERVICE_GAP = 20
+const servicesTotalW =
+  services.length * SMALL_W + (services.length - 1) * SERVICE_GAP
+const servicesOffsetX = centerX - servicesTotalW / 2
+services.forEach((s, i) => {
+  nodes.push({
+    id: s.id,
+    type: 'text',
+    category: 'service',
+    text: s.title,
+    x: servicesOffsetX + i * (SMALL_W + SERVICE_GAP),
+    y: ROW_Y.services,
+    width: SMALL_W,
+    height: SMALL_H,
+    customData: { kind: s.kind },
   })
 })
 

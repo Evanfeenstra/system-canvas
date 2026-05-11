@@ -23,6 +23,7 @@ import { NodeCountBadge } from '../primitives/NodeCountBadge.js'
 import { NodeDot } from '../primitives/NodeDot.js'
 import { NodeText } from '../primitives/NodeText.js'
 import { NodeStatusPill } from '../primitives/NodeStatusPill.js'
+import { NodeIcon } from './NodeIcon.js'
 
 interface CategorySlotsLayerProps {
   node: ResolvedNode
@@ -292,6 +293,33 @@ function renderSlot(
     case 'dot': {
       const color = resolveAccessorOr(spec.color, nodeColor, ctx)
       return <NodeDot region={region} color={color} />
+    }
+    case 'icon': {
+      const name = resolveAccessor(spec.name, ctx)
+      if (!name) return null
+      const color = resolveAccessorOr(spec.color, nodeColor, ctx)
+      const opacity = resolveAccessorOr<number>(spec.opacity, 1, ctx)
+      // Default size = the shorter axis of the region minus a small inset,
+      // so an icon in a 1.25em corner slot reads as a corner icon and an
+      // icon in a larger `body` or `header` region scales up naturally.
+      // Consumers can pin a fixed size via `spec.size`.
+      const auto = Math.max(8, Math.min(region.width, region.height) - 2)
+      const size = resolveAccessorOr<number>(spec.size, auto, ctx)
+      // Center the icon in the region. NodeIcon's transform origin is the
+      // top-left of the icon's bounding square.
+      const x = region.x + (region.width - size) / 2
+      const y = region.y + (region.height - size) / 2
+      return (
+        <NodeIcon
+          icon={name}
+          x={x}
+          y={y}
+          size={size}
+          color={color}
+          opacity={opacity}
+          customIcons={theme.icons}
+        />
+      )
     }
     case 'custom': {
       return spec.render(ctx) as React.ReactNode

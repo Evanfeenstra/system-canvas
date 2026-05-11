@@ -230,6 +230,7 @@ export type SlotSpec =
   | TextSlot
   | DotSlot
   | PillSlot
+  | IconSlot
   | CustomSlot
 
 /**
@@ -392,6 +393,43 @@ export interface TextSlot {
 export interface DotSlot {
   kind: 'dot'
   color?: NodeAccessor<string>
+}
+
+/**
+ * A stroked SVG icon rendered inside the region. Path data is looked up in
+ * the theme's icon set: `theme.icons[name]` first (consumer-provided),
+ * falling back to the library's built-in icons (`database` / `server` /
+ * `person` / `cloud` / `lock` / `globe` / `code` / `folder` / `network` /
+ * `shield` / `zap` / `users` / `cog` / `terminal` / `package`). Each entry
+ * is an array of path `d` strings authored in a 16x16 coordinate space.
+ *
+ * `name` is a `NodeAccessor<string>` so the icon can switch per node via
+ * `customData` — the canonical use case is one `service` category whose
+ * icon resolves from `customData.kind` (`"vercel"` / `"ec2"` / `"postgres"`
+ * / etc.) against a brand-icon set declared on the theme.
+ *
+ * `color` is optional — when omitted, inherits `node.resolvedStroke` so
+ * the icon follows toolbar color changes alongside every other slot.
+ *
+ * `size` (in canvas-space px) overrides the auto-fit to the region. By
+ * default the icon scales to fit the region's shorter axis with a small
+ * inset, so an icon in a 1.25em corner slot reads as a corner icon and
+ * an icon in a larger `body` region reads as a body glyph — same slot
+ * definition, different positions.
+ *
+ * Unknown `name` (not present in `theme.icons` or the built-in set) renders
+ * nothing. No console warning — this is the right behavior for accessor-
+ * driven names where some `customData.kind` values may legitimately have no
+ * icon yet.
+ */
+export interface IconSlot {
+  kind: 'icon'
+  name: NodeAccessor<string>
+  color?: NodeAccessor<string>
+  /** Override the auto-fit size, in canvas-space px. */
+  size?: NodeAccessor<number>
+  /** Stroke opacity. Defaults to 1.0 (full strength). */
+  opacity?: NodeAccessor<number>
 }
 
 /**

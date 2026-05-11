@@ -49,6 +49,7 @@ export type {
   LinearGradientFill,
   DotSlot,
   PillSlot,
+  IconSlot,
   CustomSlot,
   NodeAccessor,
   SlotContext,

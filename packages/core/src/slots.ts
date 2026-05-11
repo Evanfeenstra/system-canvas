@@ -431,16 +431,22 @@ function computeReflowReservationsInternal(
   if (slots.footer) bottom = regions.footer.height + FOOTER_INSET_Y + 4
   if (slots.leftEdge) left = regions.leftEdge.width + 4
   if (slots.rightEdge) right = regions.rightEdge.width + 4
-  // A `topLeft` dot reads as an inline status marker next to the title,
+  // A `topLeft` dot or icon reads as an inline marker next to the title,
   // not a corner badge — reserve enough left padding that the title
-  // clears the dot region.
-  if (slots.topLeft && slots.topLeft.kind === 'dot') {
+  // clears the marker's region. Both kinds get the same treatment: a
+  // brand-glyph icon in `topLeft` (the canonical "platform" use case) is
+  // visually the same affordance as a status dot — a small thing next to
+  // the title.
+  if (
+    slots.topLeft &&
+    (slots.topLeft.kind === 'dot' || slots.topLeft.kind === 'icon')
+  ) {
     left = Math.max(left, regions.topLeft.x + regions.topLeft.width - node.x + 6)
   }
 
   // Dashboard-card pattern: whenever the node has "dashboard" signals
   // (an explicit header, a top-right pill, an inline bodyTop strip, an
-  // inline topLeft dot, or a footer row), pin the title to the top,
+  // inline topLeft dot/icon, or a footer row), pin the title to the top,
   // left-align it, and apply standard body padding so the body text
   // aligns with the header's inset.
   const isDashboard =
@@ -448,7 +454,8 @@ function computeReflowReservationsInternal(
     slots.topRight !== undefined ||
     slots.bodyTop !== undefined ||
     slots.footer !== undefined ||
-    (slots.topLeft !== undefined && slots.topLeft.kind === 'dot')
+    (slots.topLeft !== undefined &&
+      (slots.topLeft.kind === 'dot' || slots.topLeft.kind === 'icon'))
   if (isDashboard) {
     if (!slots.header) top = Math.max(top, HEADER_INSET_Y)
     // Baseline body padding — matches `HEADER_INSET_X` so the title,

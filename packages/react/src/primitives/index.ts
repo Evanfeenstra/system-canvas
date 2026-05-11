@@ -7,3 +7,8 @@ export { NodeCountBadge } from './NodeCountBadge.js'
 export { NodeDot } from './NodeDot.js'
 export { NodeText } from './NodeText.js'
 export { NodeStatusPill } from './NodeStatusPill.js'
+// NodeIcon lives under ../components/ because it predates the primitives
+// barrel and was already a public component-level export. Re-exporting
+// here keeps the convention "every slot kind has a primitive available
+// via system-canvas-react/primitives for kind: 'custom' authors."
+export { NodeIcon } from '../components/NodeIcon.js'
