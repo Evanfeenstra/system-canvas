@@ -48,21 +48,45 @@ const ACCENT = {
 }
 
 /**
- * Brand accent per service `customData.kind` — drives both the card's
- * resolvedStroke (via the category accessor below) and the topLeft icon
- * color (which inherits the stroke automatically). Same field used by
- * a real hive integration; here we lean on the library's built-in icon
- * names so the showcase is self-contained.
+ * Brand registry per service `customData.kind`. Each entry declares both
+ * the visual identity (icon, color) AND the render mode for the icon —
+ * `mode: 'stroke'` for the lib's built-in line glyphs (default), or
+ * `mode: 'fill'` paired with `viewBox: 24` for brand silhouettes pulled
+ * from simple-icons. Mixing the two in one registry is supported because
+ * the `IconSlot` accessors resolve per-node.
  */
-const SERVICE_KINDS: Record<string, { icon: string; color: string }> = {
-  database: { icon: 'database', color: '#60a5fa' },
-  server: { icon: 'server', color: '#f59e0b' },
-  cloud: { icon: 'cloud', color: '#67e8f9' },
-  cog: { icon: 'cog', color: '#a78bfa' },
-  package: { icon: 'package', color: '#f472b6' },
+type ServiceMeta = {
+  icon: string
+  color: string
+  mode: 'stroke' | 'fill'
+  viewBox: 16 | 24
 }
 
-function serviceMeta(node: CanvasNode): { icon: string; color: string } {
+const SERVICE_KINDS: Record<string, ServiceMeta> = {
+  // Library built-in line glyphs (16x16, stroked).
+  database: { icon: 'database', color: '#60a5fa', mode: 'stroke', viewBox: 16 },
+  server:   { icon: 'server',   color: '#f59e0b', mode: 'stroke', viewBox: 16 },
+  cloud:    { icon: 'cloud',    color: '#67e8f9', mode: 'stroke', viewBox: 16 },
+  cog:      { icon: 'cog',      color: '#a78bfa', mode: 'stroke', viewBox: 16 },
+  // Brand glyph: simple-icons Vercel triangle, 24x24 filled silhouette.
+  // Demonstrates `mode: 'fill'` + `viewBox: 24` on the same IconSlot.
+  // The path data lives in `BRAND_ICONS` below and is registered on the
+  // theme's `icons` map at theme-build time.
+  vercel:   { icon: 'vercel',   color: '#f8fafc', mode: 'fill',   viewBox: 24 },
+}
+
+/**
+ * Custom icons merged into the theme's icon set. Anything keyed here
+ * wins over the library's built-ins (none of these names collide today).
+ * Each entry is an array of `d` strings authored in the coordinate space
+ * declared by the corresponding `SERVICE_KINDS[id].viewBox`.
+ */
+const BRAND_ICONS: Record<string, string[]> = {
+  // simple-icons "vercel" — a single filled triangle in 24x24 space.
+  vercel: ['m12 1.608 12 20.784H0Z'],
+}
+
+function serviceMeta(node: CanvasNode): ServiceMeta {
   const kind = (node.customData?.kind as string | undefined) ?? 'cloud'
   return SERVICE_KINDS[kind] ?? SERVICE_KINDS.cloud
 }
@@ -542,12 +566,16 @@ const serviceCategory: any = {
       extent: 'full',
       color: (ctx: SlotContext) => serviceMeta(ctx.node).color,
     },
-    // Icon next to the title. Both `name` and `color` are accessors —
-    // they switch as `customData.kind` changes.
+    // Icon next to the title. Every field is an accessor — they switch
+    // as `customData.kind` changes. The Vercel card uses `mode: 'fill'`
+    // and `viewBox: 24` (simple-icons format); every other card stays on
+    // the lib's `mode: 'stroke'` + `viewBox: 16` line-glyph defaults.
     topLeft: {
       kind: 'icon',
       name: (ctx: SlotContext) => serviceMeta(ctx.node).icon,
       color: (ctx: SlotContext) => serviceMeta(ctx.node).color,
+      mode: (ctx: SlotContext) => serviceMeta(ctx.node).mode,
+      viewBox: (ctx: SlotContext) => serviceMeta(ctx.node).viewBox,
     },
   },
 }
@@ -624,6 +652,11 @@ export const showcaseTheme: CanvasTheme = resolveTheme(
       revenue: revenueCategory,
       service: serviceCategory,
     },
+    // Brand-icon paths merged into the theme's icon set. The library's
+    // built-in stroked glyphs (database / server / cloud / cog / ...) stay
+    // available; entries here are picked up by `kind: 'icon'` slots that
+    // reference them by name. See `BRAND_ICONS` above.
+    icons: BRAND_ICONS,
     toolbarAlign: 'left',
   },
   darkTheme
@@ -891,18 +924,20 @@ footerItems.forEach((it, i) => {
 
 // --- Services row: kind: 'icon' demo ---
 // Five service cards, each driven by a distinct `customData.kind`. The
-// brand icon, the brand color on the leftEdge stripe, and the icon color
-// are all resolved per-node from the SERVICE_KINDS registry — same
-// category for all five cards. Try the toolbar (select a service card)
-// or double-click → multi-field editor to see the swatch / pill / type
-// pattern at work; here we just show that one category renders five
-// visually distinct cards via accessor-driven slots.
+// brand icon, the leftEdge stripe color, and the icon's mode/viewBox are
+// all resolved per-node from the SERVICE_KINDS registry — one category
+// renders five visually distinct cards via accessor-driven slots. The
+// last card (Vercel) demonstrates the new `mode: 'fill'` + `viewBox: 24`
+// path for brand silhouettes alongside the lib's stroked built-ins.
 const services: Array<{ id: string; title: string; kind: string }> = [
   { id: 'svc-db', title: 'Postgres primary', kind: 'database' },
   { id: 'svc-srv', title: 'API gateway', kind: 'server' },
   { id: 'svc-cloud', title: 'CDN / edge', kind: 'cloud' },
   { id: 'svc-cog', title: 'Workers', kind: 'cog' },
-  { id: 'svc-pkg', title: 'Build artifacts', kind: 'package' },
+  // Vercel — `mode: 'fill'` + `viewBox: 24` brand glyph. Demonstrates
+  // mixing stroked line icons and filled brand silhouettes in a single
+  // category's IconSlot via NodeAccessor resolution per node.
+  { id: 'svc-vercel', title: 'Frontend (Vercel)', kind: 'vercel' },
 ]
 const SERVICE_GAP = 20
 const servicesTotalW =

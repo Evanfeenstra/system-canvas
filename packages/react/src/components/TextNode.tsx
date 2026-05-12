@@ -67,11 +67,28 @@ export function TextNode({
   // area — suppress the default label so the two don't stack.
   const hasBodySlot = slots?.body !== undefined
 
-  // Label layout: when the node has a header slot (reservedTop > 0), the
-  // label aligns top-left under the header — dashboard-card style. When
-  // there's no header, the label centers (historical behavior for
-  // plain text nodes).
+  // Label layout. Three patterns:
+  //
+  //   1. **Top-aligned** — header / footer / topRight pill / bodyTop bar
+  //      (any "top-row" dashboard signal). Title pins under the header
+  //      strip; sublabel below. `reservedTop > 0` is the geometry proxy.
+  //
+  //   2. **Inline row** — only a `topLeft` dot or icon, no top-row signal.
+  //      The reflow leaves `reservedTop = 0` but the `topLeft` region is
+  //      vertically centered (see core's `computeCategorySlotRegions`),
+  //      so the title also vertical-centers — same row as the marker —
+  //      AND left-aligns flush-left in the content area.
+  //
+  //   3. **Centered** — no slots, plain text node. Title centers both
+  //      vertically and horizontally (legacy behavior).
   const hasHeader = reservedTop > 0
+  const hasInlineLeftMarker =
+    slots?.topLeft !== undefined &&
+    (slots.topLeft.kind === 'dot' || slots.topLeft.kind === 'icon') &&
+    !hasHeader
+  // "Left-align the title" is the dashboard convention for both top-aligned
+  // and inline-row patterns. Plain text nodes still center.
+  const isLeftAligned = hasHeader || hasInlineLeftMarker
   const labelFont = theme.node.labelFont ?? theme.node.fontFamily
   const labelFontSize = theme.node.fontSize + (hasHeader ? 1 : 0)
   const lineHeight = labelFontSize + 4
@@ -79,8 +96,10 @@ export function TextNode({
     ? lineHeight + theme.node.sublabelFontSize + 4
     : lineHeight
 
-  const labelAnchor: 'middle' | 'start' = hasHeader ? 'start' : 'middle'
-  const labelX = hasHeader ? contentX : contentX + contentWidth / 2
+  const labelAnchor: 'middle' | 'start' = isLeftAligned ? 'start' : 'middle'
+  const labelX = isLeftAligned ? contentX : contentX + contentWidth / 2
+  // Vertical anchor: pin-to-top only for the header-led pattern. Inline-row
+  // and centered patterns both vertically center.
   const textStartY = hasHeader
     ? contentY + labelFontSize + 2
     : contentY + (contentHeight - totalTextHeight) / 2 + labelFontSize

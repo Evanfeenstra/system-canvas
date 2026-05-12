@@ -10,14 +10,37 @@ interface NodeIconProps {
   /**
    * Custom icon map, merged over the built-in set. Entries here win over
    * built-ins of the same name, so themes can both extend and override.
-   * Path data is expected in a 16x16 coordinate space.
+   * Path data is expected in the coordinate space declared by `viewBox`.
    */
   customIcons?: Record<string, string[]>
+  /**
+   * Render style. `'stroke'` (default) paints paths with `stroke={color}`
+   * and `fill="none"` — right for line-style glyphs (the library's
+   * built-ins). `'fill'` paints with `fill={color}` and no stroke — right
+   * for brand silhouettes (simple-icons, Lucide filled, Font Awesome
+   * solid). A stroked Vercel triangle is just an outline; a filled one is
+   * the Vercel logo.
+   */
+  mode?: 'stroke' | 'fill'
+  /**
+   * Source coordinate space of the icon's path data. Defaults to 16
+   * (matches the library's built-in icons). Set to 24 for simple-icons
+   * or any brand-icon set authored in a 24x24 box. Paths are rescaled
+   * to the target `size` automatically.
+   */
+  viewBox?: 16 | 24
 }
 
 /**
  * Renders a small SVG icon at the given position.
- * All icons are drawn as stroked paths within a `size x size` viewBox.
+ *
+ * Two render styles supported via `mode`:
+ *   - `'stroke'` (default) — paths painted with `stroke={color}` and
+ *     `fill="none"`. Designed for line-style glyphs in a 16x16 viewBox,
+ *     which is how every built-in icon is authored.
+ *   - `'fill'` — paths painted with `fill={color}` and no stroke. The
+ *     right mode for brand silhouettes; pair with `viewBox: 24` when
+ *     loading simple-icons paths.
  */
 export function NodeIcon({
   icon,
@@ -27,9 +50,17 @@ export function NodeIcon({
   color,
   opacity = 0.7,
   customIcons,
+  mode = 'stroke',
+  viewBox = 16,
 }: NodeIconProps) {
   const pathData = customIcons?.[icon] ?? iconPaths[icon]
   if (!pathData) return null
+
+  // Stroke widths are tuned per viewBox: a 1.2px stroke in 16-unit space
+  // is the line weight the built-ins were designed for; in 24-unit space
+  // the same visual weight is closer to 1.8 because the path coords are
+  // 1.5× larger before rescaling.
+  const strokeWidth = viewBox === 24 ? 1.8 : 1.2
 
   return (
     <g
@@ -40,12 +71,16 @@ export function NodeIcon({
       {pathData.map((d, i) => (
         <path
           key={i}
-          d={scalePathData(d, size)}
-          fill="none"
-          stroke={color}
-          strokeWidth={1.2}
-          strokeLinecap="round"
-          strokeLinejoin="round"
+          d={scalePathData(d, size, viewBox)}
+          fill={mode === 'fill' ? color : 'none'}
+          stroke={mode === 'stroke' ? color : 'none'}
+          strokeWidth={mode === 'stroke' ? strokeWidth : 0}
+          strokeLinecap={mode === 'stroke' ? 'round' : undefined}
+          strokeLinejoin={mode === 'stroke' ? 'round' : undefined}
+          // Brand silhouettes are typically authored as a single path
+          // whose holes are expressed with subpath winding. `evenodd`
+          // is the safe choice; nonzero would fill some holes solid.
+          fillRule={mode === 'fill' ? 'evenodd' : undefined}
         />
       ))}
     </g>
@@ -53,10 +88,17 @@ export function NodeIcon({
 }
 
 /**
- * Scale path data from a 16x16 coordinate space to the target size.
+ * Scale path data from a source coordinate space (`source`, in user units)
+ * to the target rendered `size` in canvas-space px. Naive number-token
+ * replace — every number in the path string is multiplied by `size/source`,
+ * including the `large-arc-flag` and `sweep-flag` values of an SVG `A`
+ * arc command. Browsers tolerate the resulting non-integer flag values
+ * (treating them as truthy/falsy) so this works for the built-in icons in
+ * practice; if a brand path ever renders wrong on a specific arc, the fix
+ * is to pre-scale the path data offline rather than complicate the regex.
  */
-function scalePathData(d: string, size: number): string {
-  const scale = size / 16
+function scalePathData(d: string, size: number, source: number): string {
+  const scale = size / source
   return d.replace(/(-?\d+\.?\d*)/g, (match) => {
     return String(parseFloat(match) * scale)
   })

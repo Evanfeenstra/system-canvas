@@ -151,12 +151,35 @@ export function computeCategorySlotRegions(
       width: tab,
       height: tab,
     },
-    topLeft: {
-      x: x + CORNER_INSET,
-      y: y + CORNER_INSET,
-      width: corner,
-      height: corner,
-    },
+    topLeft: (() => {
+      // Default position: pinned to the top-left corner (the "corner
+      // badge" use case — status dots, count badges, decorative marks).
+      //
+      // When `topLeft` is a `dot` or `icon` AND the card has NO header,
+      // the slot reads instead as an inline marker on the same row as
+      // the (vertically-centered) title text. In that case we shift the
+      // slot's vertical position to the node's vertical center so the
+      // marker and the title align as one row. The horizontal position
+      // stays put — `computeReflowReservations` adds matching left
+      // padding so the title clears the marker's region.
+      //
+      // When a header IS declared, the title is pinned to the top via
+      // the dashboard reflow, and the icon at the top-left coexists with
+      // header text — keeping it in the corner is the right behavior.
+      const usesInlineRow =
+        slots?.topLeft !== undefined &&
+        (slots.topLeft.kind === 'dot' || slots.topLeft.kind === 'icon') &&
+        slots.header === undefined
+      const slotY = usesInlineRow
+        ? y + (height - corner) / 2
+        : y + CORNER_INSET
+      return {
+        x: x + CORNER_INSET,
+        y: slotY,
+        width: corner,
+        height: corner,
+      }
+    })(),
     topRight: {
       x: x + width - CORNER_INSET - corner,
       y: y + CORNER_INSET,
@@ -444,20 +467,34 @@ function computeReflowReservationsInternal(
     left = Math.max(left, regions.topLeft.x + regions.topLeft.width - node.x + 6)
   }
 
-  // Dashboard-card pattern: whenever the node has "dashboard" signals
-  // (an explicit header, a top-right pill, an inline bodyTop strip, an
-  // inline topLeft dot/icon, or a footer row), pin the title to the top,
-  // left-align it, and apply standard body padding so the body text
-  // aligns with the header's inset.
-  const isDashboard =
+  // Dashboard-card pattern. Two flavors:
+  //
+  //   (a) **Top-row signal** — header, top-right pill, bodyTop strip, or
+  //       a footer row. The title is pinned to the top and left-aligned,
+  //       with standard body padding so it lines up with header text.
+  //
+  //   (b) **Inline marker** — a `topLeft` dot or icon by itself, with no
+  //       top-row signal. The title is left-aligned BUT NOT pinned to
+  //       the top — instead, the `topLeft` region itself is shifted to
+  //       the vertical center of the node (see `computeCategorySlotRegions`
+  //       → `topLeft` → `usesInlineRow`). The marker and the title both
+  //       vertical-center, both left-align, reading as one row.
+  //
+  // Both flavors share the left-align + body-padding contract; only the
+  // top reservation differs.
+  const hasTopRowSignal =
     slots.header !== undefined ||
     slots.topRight !== undefined ||
     slots.bodyTop !== undefined ||
-    slots.footer !== undefined ||
-    (slots.topLeft !== undefined &&
-      (slots.topLeft.kind === 'dot' || slots.topLeft.kind === 'icon'))
+    slots.footer !== undefined
+  const hasInlineLeftMarker =
+    slots.topLeft !== undefined &&
+    (slots.topLeft.kind === 'dot' || slots.topLeft.kind === 'icon')
+  const isDashboard = hasTopRowSignal || hasInlineLeftMarker
   if (isDashboard) {
-    if (!slots.header) top = Math.max(top, HEADER_INSET_Y)
+    if (hasTopRowSignal && !slots.header) {
+      top = Math.max(top, HEADER_INSET_Y)
+    }
     // Baseline body padding — matches `HEADER_INSET_X` so the title,
     // sublabel, and header text all share the same left edge. Without
     // this, text renders flush against the node's rounded stroke.

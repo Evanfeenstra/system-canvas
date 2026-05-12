@@ -396,12 +396,12 @@ export interface DotSlot {
 }
 
 /**
- * A stroked SVG icon rendered inside the region. Path data is looked up in
- * the theme's icon set: `theme.icons[name]` first (consumer-provided),
- * falling back to the library's built-in icons (`database` / `server` /
- * `person` / `cloud` / `lock` / `globe` / `code` / `folder` / `network` /
- * `shield` / `zap` / `users` / `cog` / `terminal` / `package`). Each entry
- * is an array of path `d` strings authored in a 16x16 coordinate space.
+ * An SVG icon rendered inside the region. Path data is looked up in the
+ * theme's icon set: `theme.icons[name]` first (consumer-provided), falling
+ * back to the library's built-in icons (`database` / `server` / `person` /
+ * `cloud` / `lock` / `globe` / `code` / `folder` / `network` / `shield` /
+ * `zap` / `users` / `cog` / `terminal` / `package`). Each entry is an
+ * array of path `d` strings.
  *
  * `name` is a `NodeAccessor<string>` so the icon can switch per node via
  * `customData` — the canonical use case is one `service` category whose
@@ -421,6 +421,29 @@ export interface DotSlot {
  * nothing. No console warning — this is the right behavior for accessor-
  * driven names where some `customData.kind` values may legitimately have no
  * icon yet.
+ *
+ * **`mode` — render style.**
+ *
+ * The library's built-in icons are line-style glyphs designed to be drawn
+ * as stroked paths with `fill="none"` (default `mode: 'stroke'`). Most
+ * brand icon sets (simple-icons, Lucide's filled variants, Font Awesome
+ * solid, etc.) ship as **filled silhouettes** instead — a single path
+ * whose interior is the visible glyph. Setting `mode: 'fill'` renders the
+ * paths with `fill={color}` and no stroke, which is what brand icons
+ * need to look right. A stroked Vercel triangle is just an outline of a
+ * triangle; a filled one is the Vercel logo.
+ *
+ * **`viewBox` — source coordinate space.**
+ *
+ * The lib's built-in icons are authored in a 16x16 box (default
+ * `viewBox: 16`). Simple-icons and most brand-icon CDNs ship in a 24x24
+ * box (`viewBox: 24`). Set this to whatever space your `paths` strings
+ * use — the renderer rescales to the target `size` automatically.
+ *
+ * Both `mode` and `viewBox` are `NodeAccessor`s so a single `IconSlot`
+ * can render line glyphs for some `customData.kind` values and filled
+ * brand glyphs for others — useful when a registry mixes line-style
+ * fallbacks with brand-accurate paths.
  */
 export interface IconSlot {
   kind: 'icon'
@@ -428,8 +451,21 @@ export interface IconSlot {
   color?: NodeAccessor<string>
   /** Override the auto-fit size, in canvas-space px. */
   size?: NodeAccessor<number>
-  /** Stroke opacity. Defaults to 1.0 (full strength). */
+  /** Paint opacity. Defaults to 1.0 (full strength). */
   opacity?: NodeAccessor<number>
+  /**
+   * Render style. `'stroke'` (default) paints paths with `stroke={color}`
+   * and `fill="none"` — right for line-style glyphs. `'fill'` paints with
+   * `fill={color}` and no stroke — right for brand silhouettes (Vercel,
+   * AWS, Postgres, etc.).
+   */
+  mode?: NodeAccessor<'stroke' | 'fill'>
+  /**
+   * Source coordinate space of the path data. Defaults to 16 (matches the
+   * library's built-in icons). Set to 24 for simple-icons or any
+   * brand-icon set authored in a 24x24 box.
+   */
+  viewBox?: NodeAccessor<16 | 24>
 }
 
 /**
