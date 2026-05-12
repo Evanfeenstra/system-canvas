@@ -89,19 +89,115 @@ export function NodeIcon({
 
 /**
  * Scale path data from a source coordinate space (`source`, in user units)
- * to the target rendered `size` in canvas-space px. Naive number-token
- * replace — every number in the path string is multiplied by `size/source`,
- * including the `large-arc-flag` and `sweep-flag` values of an SVG `A`
- * arc command. Browsers tolerate the resulting non-integer flag values
- * (treating them as truthy/falsy) so this works for the built-in icons in
- * practice; if a brand path ever renders wrong on a specific arc, the fix
- * is to pre-scale the path data offline rather than complicate the regex.
+ * to the target rendered `size` in canvas-space px.
+ *
+ * Path tokens (commands like `M` / `L` / `Z` and numbers) are split out,
+ * numbers multiplied by `size/source`, and the result reassembled with
+ * single-space separators.
+ *
+ * **Compact form support.** SVG path syntax allows three abbreviations
+ * that a naive `(-?\d+\.?\d*)`-style number regex would mis-tokenize:
+ *
+ *   1. **Bare leading dot** (`-.23`, `.5`) — a digit-required-before-dot
+ *      regex matches just `23` / `5`, dropping the leading `.` and
+ *      scaling the wrong number. Most simple-icons paths use this form
+ *      heavily ("M6.49 19.04h-.23L5.13..."), so getting it wrong means
+ *      every brand glyph except a lucky few (Vercel's all-integer
+ *      path) paints garbage.
+ *
+ *   2. **Adjacent decimals with no delimiter** (`.15.15` representing
+ *      two numbers `0.15 0.15`). Even with a corrected regex, just
+ *      `String(parseFloat)` on each match and concatenating the
+ *      surrounding text re-emits the two numbers without a separator
+ *      (`0.150.15`), which `parseFloat` reads back as a single number.
+ *      We always insert a space between consecutive scaled numbers so
+ *      the result parses unambiguously regardless of how compact the
+ *      input was.
+ *
+ *   3. **Adjacent arc flags with no delimiter** (`00`, `01`, `10`,
+ *      `11`). The SVG spec says each arc flag is a single character
+ *      — `0` or `1` — so authors are allowed to glue two of them
+ *      together. simple-icons does this routinely (the Docker logo's
+ *      ~30 little rounded rectangles are all `a.186.186 0 00.186-.185`,
+ *      with the two flags written as `00`). A general number regex
+ *      reads `00` as the single number `0` and the rest of the arc
+ *      segment's parameters shift by one slot, breaking everything
+ *      downstream. We special-case arc-flag positions to consume
+ *      exactly one digit at a time.
+ *
+ * **Arc flags are NOT scaled.** SVG's `A` / `a` (elliptical-arc)
+ * command takes seven parameters per segment: `rx ry x-axis-rotation
+ * large-arc-flag sweep-flag x y`. The two flags MUST be exactly `0`
+ * or `1` — every modern browser rejects the entire path the moment
+ * it sees `0.75` where a flag belongs. Naive scaling kills every
+ * arc-using brand glyph (GitHub, Postgres, Anthropic, Stripe, ...).
+ *
+ * We track command state across the path: after an `a`/`A` we're in
+ * arc mode and counting parameters mod 7; positions 3 and 4 are
+ * flag slots that pass through unscaled. The arc command implicitly
+ * repeats, so we stay in arc mode until a different command letter
+ * appears.
+ *
+ * Implementation: a state machine walks the string character by
+ * character. Two parsing modes — normal and arc-flag-slot. In the
+ * normal mode we use a number regex to peel off the next token; in
+ * the flag-slot mode we read exactly one `0` or `1` and stop. The
+ * letter-or-number tokenizer wouldn't be able to distinguish `00`
+ * (one number) from `0 0` (two flags) without the explicit state.
  */
 function scalePathData(d: string, size: number, source: number): string {
   const scale = size / source
-  return d.replace(/(-?\d+\.?\d*)/g, (match) => {
-    return String(parseFloat(match) * scale)
-  })
+  const out: string[] = []
+  // Match a single number starting at the current position. Number
+  // form covers `-.5` / `.5` / `5` / `5.5` / `-5.5` — both
+  // leading-dot variants. `^` anchors the match to the slice we feed
+  // in via `substring`.
+  const numberAtStart = /^-?(?:\d+\.?\d*|\.\d+)/
+  let isArc = false
+  let arcIndex = 0
+  let i = 0
+  while (i < d.length) {
+    const ch = d[i]
+    // Skip whitespace and commas — they're optional separators in SVG
+    // path syntax. Output uses our own normalized single-space joins
+    // so dropping them is safe.
+    if (ch === ' ' || ch === ',' || ch === '\t' || ch === '\n' || ch === '\r') {
+      i++
+      continue
+    }
+    // Command letter. Case-sensitive (`M` absolute vs `m` relative).
+    if (/[a-zA-Z]/.test(ch)) {
+      out.push(ch)
+      isArc = ch === 'a' || ch === 'A'
+      arcIndex = 0
+      i++
+      continue
+    }
+    // Arc flag slot — exactly one character, must be `0` or `1`.
+    // Read the single digit even if the next char is another digit
+    // (the `00` compact form). Pass through as a plain `0`/`1`
+    // (parseFloat-then-coerce defends against the rarer single-token
+    // `0.0` / `1.0` form some encoders emit, though we never expect
+    // to see it here since we read only one char).
+    if (isArc && (arcIndex === 3 || arcIndex === 4)) {
+      out.push(ch === '0' ? '0' : '1')
+      arcIndex = (arcIndex + 1) % 7
+      i++
+      continue
+    }
+    // Number token. Match greedily from the current position.
+    const m = numberAtStart.exec(d.substring(i))
+    if (!m) {
+      // Unrecognized character — skip it. Defensive; modern simple-icons
+      // paths never hit this branch.
+      i++
+      continue
+    }
+    out.push(String(parseFloat(m[0]) * scale))
+    if (isArc) arcIndex = (arcIndex + 1) % 7
+    i += m[0].length
+  }
+  return out.join(' ')
 }
 
 /**

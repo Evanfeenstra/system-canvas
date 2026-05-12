@@ -460,11 +460,46 @@ function computeReflowReservationsInternal(
   // brand-glyph icon in `topLeft` (the canonical "platform" use case) is
   // visually the same affordance as a status dot — a small thing next to
   // the title.
+  //
+  // For `kind: 'icon'`, the consumer can override the auto-fit size via
+  // `spec.size`. When that explicit size exceeds the slot region's
+  // width, the icon visibly overflows the slot box — the renderer
+  // centers the glyph in the region, so a larger icon pokes out
+  // symmetrically left AND right of the region. Reserve the icon's
+  // actual rendered width (anchored at the slot's left edge), not just
+  // the region's width, so the title clears the overflowing glyph
+  // instead of crashing into it.
+  //
+  // We deliberately use a static-value read for `spec.size` rather than
+  // resolving the accessor. The accessor needs a full `SlotContext`
+  // (region, theme, canvases, rollups) which we don't have here in the
+  // pure-geometry reservation pass — and 99% of icon size overrides
+  // are static numbers, not per-node-dynamic. Function-valued sizes
+  // fall back to the region-width reservation; an icon dynamically
+  // sized larger than its slot can still set a static lower bound or
+  // accept the visual crowding.
+  //
+  // The padding-after-icon is keyed off `fontSize` so it scales with
+  // the theme. At fontSize 13 (the default) the gap is 10px — enough
+  // breathing room that the title doesn't read as crowding the glyph.
   if (
     slots.topLeft &&
     (slots.topLeft.kind === 'dot' || slots.topLeft.kind === 'icon')
   ) {
-    left = Math.max(left, regions.topLeft.x + regions.topLeft.width - node.x + 6)
+    const region = regions.topLeft
+    let renderedWidth = region.width
+    if (slots.topLeft.kind === 'icon') {
+      const explicitSize = (slots.topLeft as { size?: NodeAccessor<number> }).size
+      if (typeof explicitSize === 'number' && explicitSize > region.width) {
+        renderedWidth = explicitSize
+      }
+    }
+    // The icon is centered in the region; its left edge is at
+    // `region.x + (region.width - renderedWidth) / 2`. The body title
+    // needs to clear THAT left edge plus the rendered width.
+    const iconLeftFromNode = region.x - node.x + (region.width - renderedWidth) / 2
+    const gap = Math.max(8, Math.round(theme.node.fontSize * 0.75))
+    left = Math.max(left, iconLeftFromNode + renderedWidth + gap)
   }
 
   // Dashboard-card pattern. Two flavors:
