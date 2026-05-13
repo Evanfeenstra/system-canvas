@@ -40,6 +40,15 @@ interface NodeTextProps {
   maxLines?: number
   /** Override per-line vertical advance in px. Defaults to ~fontSize * 1.25. */
   lineHeight?: number
+  /**
+   * Vertical placement of the wrapped block within `region`. Defaults to
+   * `'top'` (legacy behavior — block top-aligned, one ascent below
+   * `region.y`). `'center'` shifts the block so its midline matches the
+   * region's midline; `'bottom'` pins the block's last baseline near the
+   * region's bottom. Only meaningful for `wrap: true`; the single-line
+   * path always centers vertically in the region.
+   */
+  verticalAlign?: 'top' | 'center' | 'bottom'
 }
 
 /**
@@ -71,6 +80,7 @@ export function NodeText({
   wrap = false,
   maxLines,
   lineHeight: lineHeightProp,
+  verticalAlign = 'top',
 }: NodeTextProps) {
   // Stable id per render so multiple wrapped/gradient nodes never collide on
   // shared `<defs>`. `useId` returns a deterministic value for SSR/CSR.
@@ -137,9 +147,19 @@ export function NodeText({
   const lines = wrapTextWithBreaks(displayValue, region.width, fontSize, maxLines)
   if (lines.length === 0) return null
 
-  // Baseline anchor: top of region + one ascent. Subsequent lines use
-  // `dy={lineHeight}` so SVG handles vertical advance natively.
-  const baseY = region.y + fontSize
+  // Baseline anchor: top of region + one ascent by default. Subsequent
+  // lines use `dy={lineHeight}` so SVG handles vertical advance natively.
+  // For `verticalAlign: 'center' | 'bottom'`, shift the first baseline so
+  // the rendered block (height ≈ fontSize + (n-1)*lineHeight) is centered
+  // or bottom-pinned within the region.
+  const blockHeight = fontSize + (lines.length - 1) * lineHeight
+  const topY = region.y + fontSize
+  const baseY =
+    verticalAlign === 'center'
+      ? region.y + (region.height - blockHeight) / 2 + fontSize
+      : verticalAlign === 'bottom'
+        ? region.y + region.height - blockHeight + fontSize
+        : topY
   const clipId = `sc-text-clip-${safeId}`
 
   return (

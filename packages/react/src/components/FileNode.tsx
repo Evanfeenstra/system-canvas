@@ -7,6 +7,7 @@ import type {
 } from 'system-canvas'
 import { RefIndicator } from './RefIndicator.js'
 import { CategorySlotsLayer } from './CategorySlotsLayer.js'
+import { NodeText } from '../primitives/NodeText.js'
 import { toKebabCorner, type RefCorner } from './refCorner.js'
 
 interface FileNodeProps {
@@ -68,6 +69,10 @@ export function FileNode({
   const fold = 10
   const textPadding = 10 + reservedLeft
   const maxTextWidth = width - textPadding - reservedRight - fold
+  // Vertical comfort padding for the wrapped filename region when no
+  // dir-path header is present. Without it, a single-line filename sits
+  // flush against the top/bottom strokes.
+  const LABEL_PAD_Y = 6
 
   // Content-box top/bottom for vertical text layout.
   const contentY = y + reservedTop
@@ -134,7 +139,12 @@ export function FileNode({
       />
 
       {/* Clipped text group — suppressed when a `body` slot owns the main
-          content area. */}
+          content area. The filename is the only field that wraps; dirPath
+          and subpath stay single-line by design (they are path metadata
+          that should stay on one row and truncate naturally via the
+          clipPath when long). The filename renders through `NodeText` so
+          long filenames wrap to the available width instead of being cut
+          off mid-character. */}
       {!isEditing && !slots?.body && (
       <g clipPath={`url(#${clipId})`}>
         {/* Directory path (small, above filename) */}
@@ -152,21 +162,34 @@ export function FileNode({
           </text>
         )}
 
-        {/* Filename */}
-        <text
-          x={x + textPadding}
-          y={
-            contentY +
-            (dirPath ? 28 : contentHeight / 2 + (subpath ? -2 : 4))
-          }
-          fill={theme.node.labelColor}
-          fontSize={theme.node.fontSize - 1}
+        {/* Filename (wraps). `LABEL_PAD_Y` keeps the wrapped filename
+            block from crowding the top/bottom strokes when no `dirPath`
+            or `subpath` is present (without it, a single-line filename
+            sits flush against the node border). Horizontal padding is
+            already baked into `textPadding`. */}
+        <NodeText
+          region={{
+            x: x + textPadding,
+            y: dirPath
+              ? contentY + 18
+              : contentY + (subpath ? 8 : LABEL_PAD_Y),
+            width: maxTextWidth,
+            height: dirPath
+              ? Math.max(0, contentHeight - 18 - (subpath ? 16 : 0))
+              : Math.max(
+                  0,
+                  contentHeight - (subpath ? 16 : 0) - LABEL_PAD_Y * 2,
+                ),
+          }}
+          value={fileName}
+          theme={theme}
+          color={theme.node.labelColor}
+          align="start"
           fontWeight={500}
-          fontFamily={theme.node.fontFamily}
-          pointerEvents="none"
-        >
-          {fileName}
-        </text>
+          fontSize={theme.node.fontSize - 1}
+          wrap={true}
+          verticalAlign={dirPath ? 'top' : 'center'}
+        />
 
         {/* Subpath */}
         {subpath && (

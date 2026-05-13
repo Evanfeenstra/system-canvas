@@ -7,6 +7,7 @@ import type {
 } from 'system-canvas'
 import { RefIndicator } from './RefIndicator.js'
 import { CategorySlotsLayer } from './CategorySlotsLayer.js'
+import { NodeText } from '../primitives/NodeText.js'
 import { toKebabCorner, type RefCorner } from './refCorner.js'
 
 interface LinkNodeProps {
@@ -51,7 +52,14 @@ export function LinkNode({
   const contentY = y + reservedTop
   const contentWidth = Math.max(0, width - reservedLeft - reservedRight)
   const contentHeight = Math.max(0, height - reservedTop - reservedBottom)
-  const cx = contentX + contentWidth / 2
+  // Reserve space at the left for the link glyph so the wrapped URL text
+  // doesn't overlap it. Matches the glyph's `contentX + 12` placement plus
+  // a small gap.
+  const glyphReserve = 20
+  // Comfort padding inside the content rect — keeps the URL from crowding
+  // the right border and the top/bottom strokes.
+  const LABEL_PAD_X = 10
+  const LABEL_PAD_Y = 6
 
   // Parse URL to show hostname
   let displayUrl = node.url ?? ''
@@ -107,21 +115,29 @@ export function LinkNode({
         </text>
       )}
 
-      {/* URL display — suppressed when a `body` slot owns the content area. */}
+      {/* URL display — suppressed when a `body` slot owns the content area.
+          Wraps long URLs (or full URLs when `new URL()` parsing fails)
+          across the available width. `textDecoration` doesn't reach
+          `NodeText` directly today; underline is intentionally dropped on
+          wrapped output to keep the wrapped block readable — visually a
+          single-line non-wrapped URL is still the common case. */}
       {!isEditing && !slots?.body && (
-        <text
-          x={cx}
-          y={contentY + contentHeight / 2 + 4}
-          fill={theme.node.labelColor}
-          fontSize={theme.node.fontSize}
+        <NodeText
+          region={{
+            x: contentX + glyphReserve,
+            y: contentY + LABEL_PAD_Y,
+            width: Math.max(0, contentWidth - glyphReserve - LABEL_PAD_X),
+            height: Math.max(0, contentHeight - LABEL_PAD_Y * 2),
+          }}
+          value={displayUrl}
+          theme={theme}
+          color={theme.node.labelColor}
+          align="center"
           fontWeight={600}
-          fontFamily={theme.node.fontFamily}
-          textAnchor="middle"
-          pointerEvents="none"
-          textDecoration="underline"
-        >
-          {displayUrl}
-        </text>
+          fontSize={theme.node.fontSize}
+          wrap={true}
+          verticalAlign="center"
+        />
       )}
 
       {/* Category slots */}
