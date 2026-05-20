@@ -449,10 +449,20 @@ export interface DotSlot {
  * box (`viewBox: 24`). Set this to whatever space your `paths` strings
  * use — the renderer rescales to the target `size` automatically.
  *
- * Both `mode` and `viewBox` are `NodeAccessor`s so a single `IconSlot`
+   * Both `mode` and `viewBox` are `NodeAccessor`s so a single `IconSlot`
  * can render line glyphs for some `customData.kind` values and filled
  * brand glyphs for others — useful when a registry mixes line-style
  * fallbacks with brand-accurate paths.
+ *
+ * **Mixed-mode glyphs (per-path override).** Some real brand logos
+ * mix stroked and filled paths in the same artwork (OpenRouter's
+ * curves-with-arrowheads is the canonical example). For these,
+ * register the icon as an array of `IconPathSpec` objects rather than
+ * raw `string` paths — each path can declare its own `mode` and
+ * `strokeWidth`. The slot-level `mode` becomes the fallback when a
+ * path doesn't specify one. Plain `string` entries continue to work
+ * (treated as `{ d: <string> }` so existing icon sets are
+ * untouched).
  */
 export interface IconSlot {
   kind: 'icon'
@@ -467,15 +477,50 @@ export interface IconSlot {
    * and `fill="none"` — right for line-style glyphs. `'fill'` paints with
    * `fill={color}` and no stroke — right for brand silhouettes (Vercel,
    * AWS, Postgres, etc.).
+   *
+   * For mixed-mode glyphs, use the `IconPathSpec` object form in the
+   * icon registry and this slot-level `mode` acts as the default for
+   * any path that doesn't carry its own.
    */
   mode?: NodeAccessor<'stroke' | 'fill'>
   /**
    * Source coordinate space of the path data. Defaults to 16 (matches the
    * library's built-in icons). Set to 24 for simple-icons or any
-   * brand-icon set authored in a 24x24 box.
+   * brand-icon set authored in a 24x24 box. Any positive number is
+   * accepted — brand logos shipped in 512x512 boxes work directly.
    */
-  viewBox?: NodeAccessor<16 | 24>
+  viewBox?: NodeAccessor<number>
 }
+
+/**
+ * One path inside an icon, with optional per-path render overrides.
+ * Use this when a single glyph mixes stroked and filled paths (real
+ * brand logos like OpenRouter's curves-with-arrowheads). Plain
+ * `string` entries in an icon's path array are treated as `{ d }`.
+ */
+export interface IconPathSpec {
+  /** SVG path `d` data, in the icon's viewBox coordinate space. */
+  d: string
+  /**
+   * Render style for this path. When omitted, falls back to the
+   * slot-level `mode` (or `'stroke'` by default).
+   */
+  mode?: 'stroke' | 'fill'
+  /**
+   * Stroke width in the icon's viewBox units (NOT in target canvas-
+   * space px — the renderer rescales it the same way it rescales the
+   * path coordinates). When omitted, falls back to the viewBox-tuned
+   * default. Only used when the resolved mode is `'stroke'`.
+   */
+  strokeWidth?: number
+}
+
+/**
+ * An icon's path data — either an array of plain path strings (the
+ * historical shape) or an array of `IconPathSpec` objects for
+ * mixed-mode glyphs. Entries can be mixed within the same icon.
+ */
+export type IconPathData = ReadonlyArray<string | IconPathSpec>
 
 /**
  * Escape hatch for arbitrary SVG inside the region. The library still owns
@@ -787,12 +832,15 @@ export interface CanvasTheme {
   /** Map category strings to visual definitions */
   categories: Record<string, CategoryDefinition>
   /**
-   * Custom icons, merged over the built-in icon set. Each value is an array
-   * of SVG path `d` strings authored in a 16x16 coordinate space — matching
-   * the coordinate system used by the built-in icons. Useful for shipping
-   * domain-specific glyphs via the theme without forking the library.
+   * Custom icons, merged over the built-in icon set. Each value is an
+   * `IconPathData` — either an array of plain SVG path `d` strings (the
+   * historical shape, authored in a 16x16 coordinate space) or an array
+   * of `IconPathSpec` objects when a single glyph needs mixed
+   * stroked-and-filled paths (real brand logos like OpenRouter).
+   * Useful for shipping domain-specific glyphs via the theme without
+   * forking the library.
    */
-  icons?: Record<string, string[]>
+  icons?: Record<string, IconPathData>
   /**
    * Action groups shown in the floating node toolbar when a node is selected
    * in editable mode. When omitted, the library falls back to a generic

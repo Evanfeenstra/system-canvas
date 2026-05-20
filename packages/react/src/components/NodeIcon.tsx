@@ -1,4 +1,5 @@
 import React from 'react'
+import type { IconPathData, IconPathSpec } from 'system-canvas'
 
 interface NodeIconProps {
   icon: string
@@ -11,8 +12,14 @@ interface NodeIconProps {
    * Custom icon map, merged over the built-in set. Entries here win over
    * built-ins of the same name, so themes can both extend and override.
    * Path data is expected in the coordinate space declared by `viewBox`.
+   *
+   * Each icon's value is `IconPathData` — either an array of plain
+   * SVG path `d` strings, or an array of `IconPathSpec` objects when a
+   * glyph mixes stroked and filled paths. Plain strings inherit the
+   * slot-level `mode` / `viewBox` defaults; objects can override
+   * `mode` and `strokeWidth` per path.
    */
-  customIcons?: Record<string, string[]>
+  customIcons?: Record<string, IconPathData>
   /**
    * Render style. `'stroke'` (default) paints paths with `stroke={color}`
    * and `fill="none"` — right for line-style glyphs (the library's
@@ -20,15 +27,21 @@ interface NodeIconProps {
    * for brand silhouettes (simple-icons, Lucide filled, Font Awesome
    * solid). A stroked Vercel triangle is just an outline; a filled one is
    * the Vercel logo.
+   *
+   * When the icon's path data uses `IconPathSpec` objects with their
+   * own `mode`, that per-path value wins over this slot-level default.
    */
   mode?: 'stroke' | 'fill'
   /**
    * Source coordinate space of the icon's path data. Defaults to 16
    * (matches the library's built-in icons). Set to 24 for simple-icons
-   * or any brand-icon set authored in a 24x24 box. Paths are rescaled
-   * to the target `size` automatically.
+   * or any brand-icon set authored in a 24x24 box. Any positive number
+   * is accepted — real brand logos shipped in 512x512 boxes work
+   * directly without pre-scaling. Paths are rescaled to the target
+   * `size` automatically, and the auto-tuned stroke width scales in
+   * proportion so a wider viewBox doesn't draw hair-thin lines.
    */
-  viewBox?: 16 | 24
+  viewBox?: number
 }
 
 /**
@@ -56,11 +69,14 @@ export function NodeIcon({
   const pathData = customIcons?.[icon] ?? iconPaths[icon]
   if (!pathData) return null
 
-  // Stroke widths are tuned per viewBox: a 1.2px stroke in 16-unit space
-  // is the line weight the built-ins were designed for; in 24-unit space
-  // the same visual weight is closer to 1.8 because the path coords are
-  // 1.5× larger before rescaling.
-  const strokeWidth = viewBox === 24 ? 1.8 : 1.2
+  // Stroke width auto-tunes from the viewBox so a 16-unit glyph and a
+  // 512-unit glyph render at the same visual weight after rescaling
+  // to `size`. The 0.075 constant lands the original 16-unit default
+  // at ~1.2px and the original 24-unit default at ~1.8px, matching
+  // the values the built-ins were designed against; larger viewBoxes
+  // (the 512-unit brand logos) get a proportionally heavier source
+  // stroke so they don't shrink to hair lines after rescale.
+  const defaultStrokeWidth = viewBox * 0.075
 
   return (
     <g
@@ -68,21 +84,34 @@ export function NodeIcon({
       pointerEvents="none"
       opacity={opacity}
     >
-      {pathData.map((d, i) => (
-        <path
-          key={i}
-          d={scalePathData(d, size, viewBox)}
-          fill={mode === 'fill' ? color : 'none'}
-          stroke={mode === 'stroke' ? color : 'none'}
-          strokeWidth={mode === 'stroke' ? strokeWidth : 0}
-          strokeLinecap={mode === 'stroke' ? 'round' : undefined}
-          strokeLinejoin={mode === 'stroke' ? 'round' : undefined}
-          // Brand silhouettes are typically authored as a single path
-          // whose holes are expressed with subpath winding. `evenodd`
-          // is the safe choice; nonzero would fill some holes solid.
-          fillRule={mode === 'fill' ? 'evenodd' : undefined}
-        />
-      ))}
+      {pathData.map((entry, i) => {
+        // Normalize string ↔ IconPathSpec. Strings inherit slot-level
+        // defaults; objects override only what they declare.
+        const spec: IconPathSpec =
+          typeof entry === 'string' ? { d: entry } : entry
+        const pathMode = spec.mode ?? mode
+        // Per-path strokeWidth is in viewBox units (so authors can
+        // copy the exact value from the source SVG); the rescale to
+        // canvas-space px happens via the same size/viewBox ratio
+        // used for path coordinates.
+        const rawStrokeWidth = spec.strokeWidth ?? defaultStrokeWidth
+        const renderedStrokeWidth = (rawStrokeWidth * size) / viewBox
+        return (
+          <path
+            key={i}
+            d={scalePathData(spec.d, size, viewBox)}
+            fill={pathMode === 'fill' ? color : 'none'}
+            stroke={pathMode === 'stroke' ? color : 'none'}
+            strokeWidth={pathMode === 'stroke' ? renderedStrokeWidth : 0}
+            strokeLinecap={pathMode === 'stroke' ? 'round' : undefined}
+            strokeLinejoin={pathMode === 'stroke' ? 'round' : undefined}
+            // Brand silhouettes are typically authored as a single path
+            // whose holes are expressed with subpath winding. `evenodd`
+            // is the safe choice; nonzero would fill some holes solid.
+            fillRule={pathMode === 'fill' ? 'evenodd' : undefined}
+          />
+        )
+      })}
     </g>
   )
 }
@@ -203,8 +232,10 @@ function scalePathData(d: string, size: number, source: number): string {
 /**
  * Icon path data in a 16x16 coordinate space.
  * Each icon is an array of path `d` strings (some icons need multiple paths).
+ * Built-ins are all plain strings; the `IconPathData` widening at the
+ * Record type level only matters for consumer-supplied icon sets.
  */
-const iconPaths: Record<string, string[]> = {
+const iconPaths: Record<string, IconPathData> = {
   // Database: cylinder shape
   database: [
     'M 2 4 C 2 2 8 1 8 1 C 8 1 14 2 14 4 L 14 12 C 14 14 8 15 8 15 C 8 15 2 14 2 12 Z',

@@ -300,7 +300,7 @@ function renderSlot(
       const color = resolveAccessorOr(spec.color, nodeColor, ctx)
       const opacity = resolveAccessorOr<number>(spec.opacity, 1, ctx)
       const mode = resolveAccessorOr<'stroke' | 'fill'>(spec.mode, 'stroke', ctx)
-      const viewBox = resolveAccessorOr<16 | 24>(spec.viewBox, 16, ctx)
+      const viewBox = resolveAccessorOr<number>(spec.viewBox, 16, ctx)
       // Default size = the shorter axis of the region minus a small inset,
       // so an icon in a 1.25em corner slot reads as a corner icon and an
       // icon in a larger `body` or `header` region scales up naturally.

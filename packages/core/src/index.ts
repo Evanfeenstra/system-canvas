@@ -50,6 +50,8 @@ export type {
   DotSlot,
   PillSlot,
   IconSlot,
+  IconPathSpec,
+  IconPathData,
   CustomSlot,
   NodeAccessor,
   SlotContext,
