@@ -1,6 +1,6 @@
 import React, { useId } from 'react'
 import type { CanvasTheme, LinearGradientFill, SlotRect } from 'system-canvas'
-import { wrapTextWithBreaks } from 'system-canvas'
+import { truncateToWidth, wrapTextWithBreaks } from 'system-canvas'
 
 interface NodeTextProps {
   region: SlotRect
@@ -117,6 +117,17 @@ export function NodeText({
 
   // ----- Single line -----
   if (!wrap) {
+    // Character-wise truncate when the rendered text would overflow
+    // the region's right edge. Without this, a long header value
+    // (e.g. a long username, file path, or any single-token string)
+    // would render past the node's body — visually broken and a
+    // mouse-event hazard if the consumer ever attached a click
+    // listener to the text. Truncation is identity on values that
+    // already fit, so this is free for the common case.
+    //
+    // The `wrap` path already clips to the region via `<clipPath>`,
+    // so it doesn't need this guard.
+    const rendered = truncateToWidth(displayValue, region.width, fontSize)
     const y = region.y + region.height / 2 + fontSize * 0.36
     return (
       <g pointerEvents="none">
@@ -132,7 +143,7 @@ export function NodeText({
           letterSpacing={uppercase ? 0.8 : 0.2}
           pointerEvents="none"
         >
-          {displayValue}
+          {rendered}
         </text>
       </g>
     )

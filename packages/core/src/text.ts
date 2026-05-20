@@ -114,10 +114,58 @@ export function wrapTextWithBreaks(
 }
 
 /**
- * Trim `line` so that `line + '…'` fits within `maxWidth`. If the entire
- * line already fits, just appends the ellipsis. Conservative — drops one
- * word at a time from the end rather than a single character, to avoid
- * truncating mid-word.
+ * Trim `text` to fit within `maxWidth` at `fontSize`, appending an
+ * ellipsis when truncation occurs. Character-wise — drops one
+ * character at a time from the end, suitable for single-token strings
+ * (usernames, file paths, ids) that have no word boundaries to step
+ * back through.
+ *
+ * Returns the original string unchanged when it already fits, so
+ * callers can use this unconditionally without measuring first.
+ *
+ * For paragraph-style text where dropping whole words reads better,
+ * use `wrapTextWithBreaks` with a `maxLines` cap instead — its
+ * truncation step is word-aware.
+ */
+export function truncateToWidth(
+  text: string,
+  maxWidth: number,
+  fontSize: number
+): string {
+  if (!text) return text
+  if (maxWidth <= 0) return text
+  if (measureTextWidth(text, fontSize) <= maxWidth) return text
+
+  const ellipsis = '…'
+  // Binary search the longest prefix that fits with the ellipsis
+  // appended. Avoids an O(n) measure loop on long strings without
+  // changing the visual result.
+  let lo = 0
+  let hi = text.length
+  let best = 0
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1
+    const candidate = text.slice(0, mid) + ellipsis
+    if (measureTextWidth(candidate, fontSize) <= maxWidth) {
+      best = mid
+      lo = mid + 1
+    } else {
+      hi = mid - 1
+    }
+  }
+  // best === 0 means even the ellipsis alone doesn't fit (region too
+  // narrow). Return the lone ellipsis so the caller still gets a
+  // visible "there is content here" indicator rather than an empty
+  // string that reads as missing.
+  return text.slice(0, best) + ellipsis
+}
+
+/**
+ * Trim `line` so that `line + '…'` fits within `maxWidth`. Word-aware:
+ * drops one whole word at a time from the end. Falls back to
+ * character-wise truncation via `truncateToWidth` when the whole line
+ * is a single long word (e.g. a long username or file path) — otherwise
+ * the result would still overflow.
  */
 function ellipsize(line: string, maxWidth: number, fontSize: number): string {
   const ellipsis = '…'
@@ -130,6 +178,7 @@ function ellipsize(line: string, maxWidth: number, fontSize: number): string {
     const candidate = words.join(' ') + ellipsis
     if (measureTextWidth(candidate, fontSize) <= maxWidth) return candidate
   }
-  // Single word longer than maxWidth — return as-is with ellipsis.
-  return line + ellipsis
+  // Single word longer than maxWidth — fall back to character-wise
+  // truncation so the rendered text actually fits.
+  return truncateToWidth(line, maxWidth, fontSize)
 }

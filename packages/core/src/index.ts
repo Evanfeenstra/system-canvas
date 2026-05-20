@@ -127,7 +127,12 @@ export { getAtPath, setAtPath } from './paths.js'
 // Text measurement & wrapping (used by `kind: 'text'` slots; exported for
 // consumers writing `kind: 'custom'` body renderers that need the same
 // wrap behavior).
-export { measureTextWidth, wrapText, wrapTextWithBreaks } from './text.js'
+export {
+  measureTextWidth,
+  truncateToWidth,
+  wrapText,
+  wrapTextWithBreaks,
+} from './text.js'
 
 // Canvas helpers
 export {

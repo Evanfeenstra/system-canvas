@@ -30,6 +30,7 @@ import { kanbanRoot, kanbanCanvasMap, kanbanTheme } from './kanban.js'
 import { swimlaneRoot, swimlaneCanvasMap, swimlaneTheme } from './swimlane.js'
 import { nestedRoot, nestedCanvasMap } from './nested.js'
 import { showcaseRoot, showcaseCanvasMap, showcaseTheme } from './showcase.js'
+import { gatewayRoot, gatewayCanvasMap, gatewayTheme } from './gateway.js'
 
 const allThemes: Record<string, CanvasTheme> = {
   dark: darkTheme,
@@ -41,11 +42,12 @@ const allThemes: Record<string, CanvasTheme> = {
   kanban: kanbanTheme,
   swimlane: swimlaneTheme,
   showcase: showcaseTheme,
+  gateway: gatewayTheme,
 }
 
 const ROOT_KEY = '__root__'
 
-type Mode = 'system' | 'roadmap' | 'kanban' | 'swimlane' | 'nested' | 'showcase'
+type Mode = 'system' | 'roadmap' | 'kanban' | 'swimlane' | 'nested' | 'showcase' | 'gateway'
 
 // Which theme feels most natural for each mode. Consumers can still pick
 // anything from the theme dropdown, but switching modes flips to the
@@ -57,6 +59,7 @@ const DEFAULT_THEME_FOR_MODE: Record<Mode, string> = {
   swimlane: 'swimlane',
   nested: 'dark',
   showcase: 'showcase',
+  gateway: 'gateway',
 }
 
 // Whether each mode supports snap-to-lanes. Driven by whether the underlying
@@ -68,6 +71,7 @@ const MODE_HAS_LANES: Record<Mode, boolean> = {
   swimlane: true,
   nested: true, // sub-canvases have lanes even though the root doesn't
   showcase: false,
+  gateway: false,
 }
 
 // Root-label for breadcrumbs per mode.
@@ -78,6 +82,7 @@ const MODE_ROOT_LABEL: Record<Mode, string> = {
   swimlane: 'Release process',
   nested: 'Acme Co.',
   showcase: 'Showcase',
+  gateway: 'Agent Gateway',
 }
 
 // In "nested" mode we let per-canvas theme hints drive the theme instead
@@ -90,9 +95,10 @@ const MODE_USES_PER_CANVAS_THEME: Record<Mode, boolean> = {
   swimlane: false,
   nested: true,
   showcase: false,
+  gateway: false,
 }
 
-const MODES: Mode[] = ['system', 'roadmap', 'kanban', 'swimlane', 'nested', 'showcase']
+const MODES: Mode[] = ['system', 'roadmap', 'kanban', 'swimlane', 'nested', 'showcase', 'gateway']
 
 function readModeFromUrl(): Mode {
   if (typeof window === 'undefined') return 'system'
@@ -162,6 +168,10 @@ function App() {
     [ROOT_KEY]: showcaseRoot,
     ...showcaseCanvasMap,
   }))
+  const [gatewayCanvases, setGatewayCanvases] = useState<Record<string, CanvasData>>(() => ({
+    [ROOT_KEY]: gatewayRoot,
+    ...gatewayCanvasMap,
+  }))
 
   const canvasesByMode: Record<Mode, Record<string, CanvasData>> = {
     system: systemCanvases,
@@ -170,6 +180,7 @@ function App() {
     swimlane: swimlaneCanvases,
     nested: nestedCanvases,
     showcase: showcaseCanvases,
+    gateway: gatewayCanvases,
   }
   const allCanvases = canvasesByMode[mode]
 
@@ -198,6 +209,9 @@ function App() {
           break
         case 'showcase':
           setShowcaseCanvases(updater)
+          break
+        case 'gateway':
+          setGatewayCanvases(updater)
           break
       }
     },
@@ -467,6 +481,7 @@ function App() {
             <option value="swimlane">swimlane</option>
             <option value="nested">nested</option>
             <option value="showcase">showcase</option>
+            <option value="gateway">gateway</option>
           </select>
         </label>
         <label>

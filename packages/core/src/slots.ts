@@ -44,6 +44,49 @@ const TAB_BADGE_LIFT = 10
 const TAB_BADGE_OVERHANG = 8
 
 /**
+ * Clearance width (icon footprint + gap) that a header / footer region
+ * must leave for a sibling corner slot. Returns 0 for non-badge or
+ * absent specs so header geometry stays byte-identical to the
+ * pre-patch behavior when no corner badge is present.
+ *
+ * Mirrors the rendered-width logic in `computeReflowReservationsInternal`'s
+ * `topLeft` reservation block (see the body-label `left` block in
+ * `computeReflowReservationsInternal` below) so an icon with an
+ * explicit oversize `size` is fully cleared. Static-number `size`
+ * accessors are honored; function accessors (`(ctx) => …`) fall back
+ * to the region-width footprint, matching the existing body-label
+ * convention.
+ *
+ * `color` slots are edge strips, not corner badges — they paint at
+ * `LEFT_EDGE_PX` thickness and don't intrude into header territory.
+ * `progress` / `count` / `pill` / `text` / `custom` in corner regions
+ * are not enclosed in this clearance because none of them are used as
+ * header-adjacent siblings today; if a future pattern wants pill
+ * clearance on the header, extend this helper.
+ */
+function cornerSlotClearance(
+  spec: SlotSpec | undefined,
+  fontSize: number
+): number {
+  if (!spec) return 0
+  if (spec.kind !== 'dot' && spec.kind !== 'icon') return 0
+  const corner = CORNER_EM * fontSize
+  let renderedWidth = corner
+  if (spec.kind === 'icon') {
+    const explicitSize = (spec as { size?: NodeAccessor<number> }).size
+    if (typeof explicitSize === 'number' && explicitSize > corner) {
+      renderedWidth = explicitSize
+    }
+  }
+  const gap = Math.max(8, Math.round(fontSize * 0.75))
+  // The badge is centered in a `corner`-wide region; for an oversize
+  // icon, the extra width spills symmetrically. Half-spill on the
+  // inner side + the icon's own footprint + the gap.
+  const overhang = Math.max(0, (renderedWidth - corner) / 2)
+  return overhang + corner + gap
+}
+
+/**
  * Compute the region rect (in canvas-space) for every slot position on a
  * resolved node. Pure geometry — no knowledge of which slots are actually
  * in use. Callers index by `SlotPosition`.
@@ -198,18 +241,64 @@ export function computeCategorySlotRegions(
       width: corner,
       height: corner,
     },
-    header: {
-      x: x + HEADER_INSET_X,
-      y: y + HEADER_INSET_Y,
-      width: Math.max(0, width - HEADER_INSET_X * 2),
-      height: header,
-    },
-    footer: {
-      x: x + HEADER_INSET_X,
-      y: y + height - FOOTER_INSET_Y - footer,
-      width: Math.max(0, width - HEADER_INSET_X * 2),
-      height: footer,
-    },
+    header: (() => {
+      // The header strip would otherwise overlap a `topLeft` /
+      // `topRight` corner badge (dot/icon): header starts at
+      // `HEADER_INSET_X` (14) while a corner badge occupies
+      // `CORNER_INSET` (8) to `CORNER_INSET + corner` (~24). Shift
+      // the header's left/right edges to clear the badge plus a
+      // small gap — same arithmetic the body-label reservation
+      // uses in `computeReflowReservationsInternal`. `color` slots
+      // are thin edge strips, not corner badges, and don't need
+      // clearance here.
+      let hx = x + HEADER_INSET_X
+      let hw = Math.max(0, width - HEADER_INSET_X * 2)
+      const leftClear = cornerSlotClearance(slots?.topLeft, fs)
+      if (leftClear > 0) {
+        const leftEdge = x + CORNER_INSET + leftClear
+        const shift = Math.max(0, leftEdge - hx)
+        hx += shift
+        hw = Math.max(0, hw - shift)
+      }
+      const rightClear = cornerSlotClearance(slots?.topRight, fs)
+      if (rightClear > 0) {
+        const rightEdge = x + width - CORNER_INSET - rightClear
+        const currentRight = hx + hw
+        const shrink = Math.max(0, currentRight - rightEdge)
+        hw = Math.max(0, hw - shrink)
+      }
+      return { x: hx, y: y + HEADER_INSET_Y, width: hw, height: header }
+    })(),
+    footer: (() => {
+      // Same treatment as the header for `bottomLeft` / `bottomRight`
+      // sibling badges. Not exercised by anything in the demo today,
+      // but the asymmetry is real — a footer text starting at
+      // `HEADER_INSET_X` overlaps a bottomLeft corner badge by ~10px
+      // at `fs=13`. Patching for symmetry now is cheaper than
+      // fielding the next bug report.
+      let fx = x + HEADER_INSET_X
+      let fw = Math.max(0, width - HEADER_INSET_X * 2)
+      const leftClear = cornerSlotClearance(slots?.bottomLeft, fs)
+      if (leftClear > 0) {
+        const leftEdge = x + CORNER_INSET + leftClear
+        const shift = Math.max(0, leftEdge - fx)
+        fx += shift
+        fw = Math.max(0, fw - shift)
+      }
+      const rightClear = cornerSlotClearance(slots?.bottomRight, fs)
+      if (rightClear > 0) {
+        const rightEdge = x + width - CORNER_INSET - rightClear
+        const currentRight = fx + fw
+        const shrink = Math.max(0, currentRight - rightEdge)
+        fw = Math.max(0, fw - shrink)
+      }
+      return {
+        x: fx,
+        y: y + height - FOOTER_INSET_Y - footer,
+        width: fw,
+        height: footer,
+      }
+    })(),
     body: {
       x: bodyX,
       y: bodyY,
