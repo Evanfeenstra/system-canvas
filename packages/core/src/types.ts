@@ -71,6 +71,15 @@ export interface CanvasEdge {
   label?: string
   /** Per-edge routing style override */
   style?: EdgeStyle
+  /**
+   * Per-edge stroke width override in canvas-space px. When omitted,
+   * the resolved EdgeTheme.strokeWidth is used. The selection
+   * highlight multiplier (~1.75x) is applied on top of the resolved
+   * width, so a custom strokeWidth still scales when the edge is
+   * selected. Useful for data-driven edges where line weight encodes
+   * a magnitude (cost, traffic, etc).
+   */
+  strokeWidth?: number
 }
 
 /**

@@ -97,9 +97,11 @@ export function EdgeRenderer({
           ? resolveColor(edge.color, theme).stroke
           : theme.edge.stroke
         const edgeColor = isSelected ? theme.node.labelColor : baseColor
-        const strokeWidth = isSelected
-          ? theme.edge.strokeWidth * 1.75
-          : theme.edge.strokeWidth
+        // Per-edge override wins over the theme default; selection
+        // multiplier rides on top so highlights still scale on
+        // data-weighted edges.
+        const baseStrokeWidth = edge.strokeWidth ?? theme.edge.strokeWidth
+        const strokeWidth = isSelected ? baseStrokeWidth * 1.75 : baseStrokeWidth
 
         const toEnd = edge.toEnd ?? 'arrow'
         const fromEnd = edge.fromEnd ?? 'none'
