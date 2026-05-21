@@ -29,14 +29,16 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          # node-version: '22' ships with npm >= 10.9; we explicitly upgrade
-          # npm below to >= 11.5.1 (required for OIDC trusted publishing).
+          # Node 22 ships with npm 10.x; we need >= 11.5.1 for OIDC trusted
+          # publishing. We upgrade via a sudo install to a separate global
+          # prefix below (in-place `npm install -g npm@latest` corrupts itself
+          # by deleting its own files mid-execution on hosted runners).
           node-version: '22'
           registry-url: 'https://registry.npmjs.org'
 
       - name: Upgrade npm to >= 11.5.1 (required for OIDC trusted publishing)
         run: |
-          npm install -g npm@latest
+          sudo npm install -g npm@latest --force
           npm --version
 
       - name: Verify package versions are in lockstep with root
