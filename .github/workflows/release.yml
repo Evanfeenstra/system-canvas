@@ -41,6 +41,29 @@ jobs:
           sudo npm install -g npm@latest --force
           npm --version
 
+      - name: Strip auth-token line from .npmrc so npm uses OIDC
+        # actions/setup-node writes "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}"
+        # into ~/.npmrc. With an empty/missing NODE_AUTH_TOKEN, npm sees a malformed
+        # token and either errors with ENEEDAUTH or sends bad auth instead of falling
+        # back to OIDC. Removing the line entirely lets npm 11.5+ auto-discover the
+        # GitHub Actions OIDC environment and exchange for a publish token.
+        run: |
+          if [ -f "$HOME/.npmrc" ]; then
+            echo "Before:"
+            cat "$HOME/.npmrc"
+            sed -i '/_authToken/d' "$HOME/.npmrc"
+            echo "After:"
+            cat "$HOME/.npmrc"
+          fi
+
+      - name: Verify OIDC environment is available
+        run: |
+          if [ -z "$ACTIONS_ID_TOKEN_REQUEST_URL" ]; then
+            echo "::error::ACTIONS_ID_TOKEN_REQUEST_URL is not set. The job is missing 'id-token: write' permission or the runner doesn't support OIDC."
+            exit 1
+          fi
+          echo "OIDC environment available."
+
       - name: Verify package versions are in lockstep with root
         run: |
           ROOT_VERSION=$(node -p "require('./package.json').version")
@@ -102,25 +125,18 @@ jobs:
       - name: Build all packages
         run: npm run build
 
-      # NODE_AUTH_TOKEN is explicitly cleared on each publish step. actions/setup-node
-      # writes an .npmrc referencing ${NODE_AUTH_TOKEN}; if that env var is empty or
-      # missing, npm sends a malformed auth header that breaks the OIDC fallback and
-      # makes the registry return 404 "not in this registry". Setting it to empty
-      # forces npm down the OIDC trusted-publisher path cleanly.
+      # No NODE_AUTH_TOKEN needed — the prior step stripped the _authToken line
+      # from .npmrc, so npm 11.5+ falls through to OIDC trusted publishing using
+      # the ACTIONS_ID_TOKEN_REQUEST_URL/ACTIONS_ID_TOKEN_REQUEST_TOKEN env vars
+      # that GitHub injects when `id-token: write` is granted.
       - name: Publish system-canvas
         run: npm publish --provenance --access public -w system-canvas
-        env:
-          NODE_AUTH_TOKEN: ""
 
       - name: Publish system-canvas-react
         run: npm publish --provenance --access public -w system-canvas-react
-        env:
-          NODE_AUTH_TOKEN: ""
 
       - name: Publish system-canvas-standalone
         run: npm publish --provenance --access public -w system-canvas-standalone
-        env:
-          NODE_AUTH_TOKEN: ""
 
       - name: Push version bump + tag
         run: git push --follow-tags origin main
