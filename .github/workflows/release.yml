@@ -27,42 +27,21 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Node
+        # Node 24 ships with npm >= 11.5 natively, no upgrade dance needed.
+        # We do NOT set registry-url here — that's what writes the broken
+        # _authToken line into ~/.npmrc and breaks OIDC. npm defaults to
+        # registry.npmjs.org anyway.
         uses: actions/setup-node@v4
         with:
-          # Node 22 ships with npm 10.x; we need >= 11.5.1 for OIDC trusted
-          # publishing. We upgrade via a sudo install to a separate global
-          # prefix below (in-place `npm install -g npm@latest` corrupts itself
-          # by deleting its own files mid-execution on hosted runners).
-          node-version: '22'
-          registry-url: 'https://registry.npmjs.org'
-
-      - name: Upgrade npm to >= 11.5.1 (required for OIDC trusted publishing)
-        run: |
-          sudo npm install -g npm@latest --force
-          npm --version
-
-      - name: Strip auth-token line from .npmrc so npm uses OIDC
-        # actions/setup-node writes "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}"
-        # into ~/.npmrc. With an empty/missing NODE_AUTH_TOKEN, npm sees a malformed
-        # token and either errors with ENEEDAUTH or sends bad auth instead of falling
-        # back to OIDC. Removing the line entirely lets npm 11.5+ auto-discover the
-        # GitHub Actions OIDC environment and exchange for a publish token.
-        run: |
-          if [ -f "$HOME/.npmrc" ]; then
-            echo "Before:"
-            cat "$HOME/.npmrc"
-            sed -i '/_authToken/d' "$HOME/.npmrc"
-            echo "After:"
-            cat "$HOME/.npmrc"
-          fi
+          node-version: '24'
 
       - name: Verify OIDC environment is available
         run: |
           if [ -z "$ACTIONS_ID_TOKEN_REQUEST_URL" ]; then
-            echo "::error::ACTIONS_ID_TOKEN_REQUEST_URL is not set. The job is missing 'id-token: write' permission or the runner doesn't support OIDC."
+            echo "::error::ACTIONS_ID_TOKEN_REQUEST_URL is not set."
             exit 1
           fi
-          echo "OIDC environment available."
+          echo "OIDC environment available. npm: $(npm --version), node: $(node --version)"
 
       - name: Verify package versions are in lockstep with root
         run: |
@@ -125,30 +104,24 @@ jobs:
       - name: Build all packages
         run: npm run build
 
-      # No NODE_AUTH_TOKEN needed — the prior step stripped the _authToken line
-      # from .npmrc, so npm 11.5+ falls through to OIDC trusted publishing using
-      # the ACTIONS_ID_TOKEN_REQUEST_URL/ACTIONS_ID_TOKEN_REQUEST_TOKEN env vars
-      # that GitHub injects when `id-token: write` is granted.
-      #
-      # Publishing via `cd packages/<pkg> && npm publish` instead of the workspace
-      # flag (`npm publish -w <name>`). There are known cases where the OIDC
-      # audience claim is computed against the root workspace package when using
-      # `-w`, causing the registry to reject the write.
+      # OIDC trusted publishing. No NODE_AUTH_TOKEN, no .npmrc. npm detects the
+      # GitHub Actions OIDC environment via ACTIONS_ID_TOKEN_REQUEST_URL +
+      # ACTIONS_ID_TOKEN_REQUEST_TOKEN (auto-injected by `id-token: write`),
+      # exchanges with npm's token endpoint, and publishes with provenance.
       - name: Publish system-canvas
         run: |
           cd packages/core
           npm publish --provenance --access public
 
-      # TODO: re-enable after system-canvas publish succeeds.
-      # - name: Publish system-canvas-react
-      #   run: |
-      #     cd packages/react
-      #     npm publish --provenance --access public
-      #
-      # - name: Publish system-canvas-standalone
-      #   run: |
-      #     cd packages/standalone
-      #     npm publish --provenance --access public
+      - name: Publish system-canvas-react
+        run: |
+          cd packages/react
+          npm publish --provenance --access public
+
+      - name: Publish system-canvas-standalone
+        run: |
+          cd packages/standalone
+          npm publish --provenance --access public
 
       - name: Push version bump + tag
         run: git push --follow-tags origin main
