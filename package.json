@@ -14,9 +14,8 @@
     "dev": "npm run dev -w system-canvas-demo",
     "typecheck": "npm run typecheck --workspaces",
     "sync-versions": "node scripts/sync-versions.mjs",
-    "release": "npm version patch --no-git-tag-version && npm run sync-versions && git add -A && git commit -m \"release: v$(node -p \\\"require('./package.json').version\\\")\" && git tag \"v$(node -p \\\"require('./package.json').version\\\")\" && git push --follow-tags",
-    "release:minor": "npm version minor --no-git-tag-version && npm run sync-versions && git add -A && git commit -m \"release: v$(node -p \\\"require('./package.json').version\\\")\" && git tag \"v$(node -p \\\"require('./package.json').version\\\")\" && git push --follow-tags",
-    "release:major": "npm version major --no-git-tag-version && npm run sync-versions && git add -A && git commit -m \"release: v$(node -p \\\"require('./package.json').version\\\")\" && git tag \"v$(node -p \\\"require('./package.json').version\\\")\" && git push --follow-tags"
+    "release:minor": "npm version minor --no-git-tag-version && npm run sync-versions && git add -A && git commit -m \"release: v$(node -p \\\"require('./package.json').version\\\")\" && git push",
+    "release:major": "npm version major --no-git-tag-version && npm run sync-versions && git add -A && git commit -m \"release: v$(node -p \\\"require('./package.json').version\\\")\" && git push"
   },
   "devDependencies": {
     "typescript": "^5.4.0"

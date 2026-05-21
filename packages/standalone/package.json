@@ -3,6 +3,11 @@
   "version": "0.2.0",
   "description": "Self-contained browser bundle for system-canvas. Drop-in <script> tag with React inlined; renders a fully interactive canvas into any DOM element.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stakwork/system-canvas.git",
+    "directory": "packages/standalone"
+  },
   "type": "module",
   "main": "./dist/system-canvas.js",
   "files": [
