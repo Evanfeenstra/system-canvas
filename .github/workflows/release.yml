@@ -29,8 +29,15 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          # node-version: '22' ships with npm >= 10.9; we explicitly upgrade
+          # npm below to >= 11.5.1 (required for OIDC trusted publishing).
+          node-version: '22'
           registry-url: 'https://registry.npmjs.org'
+
+      - name: Upgrade npm to >= 11.5.1 (required for OIDC trusted publishing)
+        run: |
+          npm install -g npm@latest
+          npm --version
 
       - name: Verify package versions are in lockstep with root
         run: |
@@ -93,14 +100,25 @@ jobs:
       - name: Build all packages
         run: npm run build
 
+      # NODE_AUTH_TOKEN is explicitly cleared on each publish step. actions/setup-node
+      # writes an .npmrc referencing ${NODE_AUTH_TOKEN}; if that env var is empty or
+      # missing, npm sends a malformed auth header that breaks the OIDC fallback and
+      # makes the registry return 404 "not in this registry". Setting it to empty
+      # forces npm down the OIDC trusted-publisher path cleanly.
       - name: Publish system-canvas
         run: npm publish --provenance --access public -w system-canvas
+        env:
+          NODE_AUTH_TOKEN: ""
 
       - name: Publish system-canvas-react
         run: npm publish --provenance --access public -w system-canvas-react
+        env:
+          NODE_AUTH_TOKEN: ""
 
       - name: Publish system-canvas-standalone
         run: npm publish --provenance --access public -w system-canvas-standalone
+        env:
+          NODE_AUTH_TOKEN: ""
 
       - name: Push version bump + tag
         run: git push --follow-tags origin main
