@@ -129,14 +129,26 @@ jobs:
       # from .npmrc, so npm 11.5+ falls through to OIDC trusted publishing using
       # the ACTIONS_ID_TOKEN_REQUEST_URL/ACTIONS_ID_TOKEN_REQUEST_TOKEN env vars
       # that GitHub injects when `id-token: write` is granted.
+      #
+      # Publishing via `cd packages/<pkg> && npm publish` instead of the workspace
+      # flag (`npm publish -w <name>`). There are known cases where the OIDC
+      # audience claim is computed against the root workspace package when using
+      # `-w`, causing the registry to reject the write.
       - name: Publish system-canvas
-        run: npm publish --provenance --access public -w system-canvas
+        run: |
+          cd packages/core
+          npm publish --provenance --access public
 
-      - name: Publish system-canvas-react
-        run: npm publish --provenance --access public -w system-canvas-react
-
-      - name: Publish system-canvas-standalone
-        run: npm publish --provenance --access public -w system-canvas-standalone
+      # TODO: re-enable after system-canvas publish succeeds.
+      # - name: Publish system-canvas-react
+      #   run: |
+      #     cd packages/react
+      #     npm publish --provenance --access public
+      #
+      # - name: Publish system-canvas-standalone
+      #   run: |
+      #     cd packages/standalone
+      #     npm publish --provenance --access public
 
       - name: Push version bump + tag
         run: git push --follow-tags origin main
