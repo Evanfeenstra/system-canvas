@@ -924,13 +924,14 @@ export interface BoundingBox {
  * Unified selection state surfaced to consumers via `onSelectionChange`.
  *
  * The library tracks one selection at a time — a single node OR a single
- * edge OR nothing. Clicking one kind clears the other (handled inside
- * `useCanvasInteraction`), so consumers never observe a "both selected"
- * state. Use this single callback in preference to inferring deselection
- * from peripheral events (`onNodeClick`, `onEdgeClick`, `onNavigate`):
- * those fire on activation; `onSelectionChange` fires on every actual
- * change to the selection (activation OR deactivation), including
- * background-click deselect, Escape, navigation, and post-delete clears.
+ * edge OR a multi-node set OR nothing. Clicking one kind clears the other
+ * (handled inside `useCanvasInteraction`), so consumers never observe a
+ * "both selected" state. Use this single callback in preference to inferring
+ * deselection from peripheral events (`onNodeClick`, `onEdgeClick`,
+ * `onNavigate`): those fire on activation; `onSelectionChange` fires on
+ * every actual change to the selection (activation OR deactivation),
+ * including background-click deselect, Escape, navigation, and post-delete
+ * clears.
  *
  * `canvasRef` matches the rest of the library's callbacks: the ref of the
  * canvas the selected entity lives on, `undefined` for the root canvas.
@@ -938,10 +939,17 @@ export interface BoundingBox {
  * Selection is editable-only — non-editable canvases never select
  * anything, so consumers receive at most a single trailing `null` if
  * they toggle `editable` off while something was selected.
+ *
+ * The `'multi'` kind is emitted when 2 or more nodes are selected
+ * simultaneously (via Shift-click, Cmd+A, or marquee box-select). The
+ * `nodes` array contains the full `CanvasNode` data for every selected
+ * node so consumers can drive bulk DB mutations and context menus without
+ * additional lookups.
  */
 export type CanvasSelection =
   | { kind: 'node'; node: CanvasNode; canvasRef: string | undefined }
   | { kind: 'edge'; edge: CanvasEdge; canvasRef: string | undefined }
+  | { kind: 'multi'; nodes: CanvasNode[]; canvasRef: string | undefined }
   | null
 
 export interface ContextMenuEvent {

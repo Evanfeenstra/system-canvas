@@ -42,6 +42,9 @@ export { useNodeResize } from './hooks/useNodeResize.js'
 export type { ResizeCorner, ResizeOverride } from './hooks/useNodeResize.js'
 export { useEdgeCreate } from './hooks/useEdgeCreate.js'
 export type { PendingEdgeState } from './hooks/useEdgeCreate.js'
+export { useMultiSelect } from './hooks/useMultiSelect.js'
+export type { MarqueeRect } from './hooks/useMultiSelect.js'
+export { useMultiSelectClipboard } from './hooks/useMultiSelectClipboard.js'
 
 // Re-export everything from core for convenience
 export * from 'system-canvas'
