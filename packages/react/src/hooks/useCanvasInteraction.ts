@@ -21,6 +21,13 @@ interface UseCanvasInteractionOptions {
   // Editable-mode extensions
   editable?: boolean
   onSelect?: (nodeId: string | null) => void
+  /**
+   * Called instead of `onSelect` when the user Shift-clicks a node.
+   * Used for additive/toggle multi-selection. Edge selection is NOT
+   * cleared on shift-click so the user can build a selection without
+   * disrupting other UI state.
+   */
+  onToggleSelect?: (nodeId: string) => void
   onBeginEdit?: (node: ResolvedNode) => void
   onSelectEdge?: (edgeId: string | null) => void
   onBeginEditEdge?: (edge: CanvasEdge) => void
@@ -52,6 +59,7 @@ export function useCanvasInteraction(
     viewport,
     editable,
     onSelect,
+    onToggleSelect,
     onBeginEdit,
     onSelectEdge,
     onBeginEditEdge,
@@ -61,12 +69,18 @@ export function useCanvasInteraction(
     (node: ResolvedNode, event: React.MouseEvent) => {
       event.stopPropagation()
       if (editable) {
-        onSelect?.(node.id)
-        onSelectEdge?.(null)
+        if (event.shiftKey && onToggleSelect) {
+          // Shift-click: toggle this node in/out of the multi-selection.
+          // Do NOT clear edge selection — the user is building a set.
+          onToggleSelect(node.id)
+        } else {
+          onSelect?.(node.id)
+          onSelectEdge?.(null)
+        }
       }
       onNodeClick?.(node)
     },
-    [editable, onNodeClick, onSelect, onSelectEdge]
+    [editable, onNodeClick, onSelect, onToggleSelect, onSelectEdge]
   )
 
   const handleNodeDoubleClick = useCallback(

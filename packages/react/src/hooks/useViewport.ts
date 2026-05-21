@@ -10,6 +10,12 @@ interface UseViewportOptions {
   maxZoom: number
   defaultViewport?: ViewportState
   onViewportChange?: (viewport: ViewportState) => void
+  /**
+   * When this ref is `true`, d3-zoom pan gestures (non-wheel) are suppressed
+   * so that Space+drag can draw a marquee rectangle without also panning the
+   * canvas.
+   */
+  marqueeActiveRef?: React.RefObject<boolean>
 }
 
 interface UseViewportResult {
@@ -36,7 +42,7 @@ interface UseViewportResult {
 }
 
 export function useViewport(options: UseViewportOptions): UseViewportResult {
-  const { minZoom, maxZoom, defaultViewport, onViewportChange } = options
+  const { minZoom, maxZoom, defaultViewport, onViewportChange, marqueeActiveRef } = options
 
   const svgRef = useRef<SVGSVGElement | null>(null)
   const groupRef = useRef<SVGGElement | null>(null)
@@ -65,6 +71,9 @@ export function useViewport(options: UseViewportOptions): UseViewportResult {
       // a node. Wheel events are always allowed so scroll-to-zoom works
       // anywhere over the canvas, even when the cursor is over a node.
       .filter((event) => {
+        // Suppress pan when the user is drawing a marquee (Space held).
+        // Wheel events are still allowed so pinch-zoom works during marquee mode.
+        if (marqueeActiveRef?.current && event.type !== 'wheel') return false
         // Mirror d3-zoom's default rules for the things we still want to
         // honor (ignore secondary buttons etc.). Note: we intentionally
         // don't block ctrl+wheel — letting it through matches d3-zoom's
