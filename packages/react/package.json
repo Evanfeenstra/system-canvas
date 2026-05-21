@@ -1,6 +1,6 @@
 {
   "name": "system-canvas-react",
-  "version": "0.1.25",
+  "version": "0.2.0",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -20,10 +20,11 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "dev": "tsc --watch"
+    "dev": "tsc --watch",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "system-canvas": "^0.1.0",
+    "system-canvas": "^0.2.0",
     "d3-zoom": "^3.0.0",
     "d3-selection": "^3.0.0",
     "d3-transition": "^3.0.0"

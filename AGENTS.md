@@ -205,6 +205,23 @@ npm run dev              # Start the Vite demo app at localhost:5173
 npm run typecheck        # Type-check all workspaces
 ```
 
+## Versioning & releases
+
+This repo publishes all three packages (`system-canvas`, `system-canvas-react`, `system-canvas-standalone`) to npm **in lockstep** — they always share a single version number. Releases are fully automated: every push to `main` triggers `.github/workflows/release.yml`, which bumps the patch version, syncs it across all workspaces, builds, and publishes via npm OIDC trusted publishing.
+
+**Rules for agents editing this repo:**
+
+- **Never edit the `version` field in any `packages/*/package.json`.** Those values are owned by the release workflow and are overwritten on every publish by `scripts/sync-versions.mjs`. A PR that bumps a single package's version will be silently clobbered at best, or break the build at worst (internal `^x.y.z` dep ranges will fail to resolve against a desynced workspace version).
+- **Never edit the internal cross-dep ranges** (e.g. `system-canvas-react`'s `"system-canvas": "^0.2.0"` entry). `sync-versions.mjs` rewrites these to `^<root-version>` on every release.
+- **To request a non-patch release** (minor or major bump), edit **only** the root `package.json`'s `version` field to the desired number. The release workflow detects this and publishes that exact version instead of auto-patching. Do this in a dedicated commit/PR titled something like `release: v0.3.0`; do not combine it with feature work.
+- **The default for any PR is a patch bump.** Don't think about versioning at all for feature/fix/refactor PRs — the workflow handles it. Just merge and a new patch publishes within ~60 seconds.
+
+**Files involved (don't move or rename these without updating the workflow):**
+
+- `.github/workflows/release.yml` — the release pipeline. Registered as a trusted publisher on npmjs.com for all three packages.
+- `scripts/sync-versions.mjs` — propagates root version into every workspace and rewrites internal dep ranges.
+- Each `packages/*/package.json` has a `prepublishOnly: npm run build` safety net so unbuilt code can't ship even if the workflow's explicit build step is removed.
+
 ## Code conventions
 
 - **No CSS files.** All styling is inline via SVG attributes and React `style` props, driven by the theme object.
