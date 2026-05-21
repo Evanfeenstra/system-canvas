@@ -1,6 +1,6 @@
 {
   "name": "system-canvas-react",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -30,7 +30,7 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "system-canvas": "^0.2.0",
+    "system-canvas": "^0.2.1",
     "d3-zoom": "^3.0.0",
     "d3-selection": "^3.0.0",
     "d3-transition": "^3.0.0"
