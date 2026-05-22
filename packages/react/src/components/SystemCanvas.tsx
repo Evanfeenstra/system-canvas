@@ -682,6 +682,7 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
     onNodeAdd: (node) => onNodeAdd?.(node, currentCanvasRef),
     onEdgeAdd: (edge) => onEdgeAdd?.(edge, currentCanvasRef),
     canvasRef: currentCanvasRef,
+    getCursorScreenPos: () => viewportHandleRef.current?.getCursorScreenPos() ?? null,
   })
 
   // Clear selection/editing when navigating between canvases
