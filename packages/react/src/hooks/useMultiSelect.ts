@@ -149,22 +149,29 @@ export function useMultiSelect(options: UseMultiSelectOptions): UseMultiSelectRe
   }, [enabled, containerRef, selectAll])
 
   // -------------------------------------------------------------------------
-  // SVG pointer events — marquee drawing
+  // Pointer events — marquee drawing
+  //
+  // Listeners are bound to the container div (available synchronously on
+  // mount). The SVG element is read lazily inside each handler via
+  // `svgRef.current` because it is populated after the Viewport child
+  // mounts — binding directly to the SVG in an effect would miss it.
   // -------------------------------------------------------------------------
 
   useEffect(() => {
     if (!enabled) return
-    const svg = svgRef.current
-    if (!svg) return
+    const container = containerRef.current
+    if (!container) return
 
     const onPointerDown = (e: PointerEvent) => {
       if (!marqueeActiveRef.current) return
       if (e.button !== 0) return
-      // Don't start a marquee if the target is a node
       const target = e.target as Element | null
       if (target && typeof target.closest === 'function') {
         if (target.closest('.system-canvas-node')) return
       }
+
+      const svg = svgRef.current
+      if (!svg) return
 
       const rect = svg.getBoundingClientRect()
       const x = e.clientX - rect.left
@@ -176,7 +183,7 @@ export function useMultiSelect(options: UseMultiSelectOptions): UseMultiSelectRe
       setMarqueeRect({ x1: x, y1: y, x2: x, y2: y })
 
       try {
-        svg.setPointerCapture(e.pointerId)
+        container.setPointerCapture(e.pointerId)
       } catch {
         // ignore
       }
@@ -189,6 +196,9 @@ export function useMultiSelect(options: UseMultiSelectOptions): UseMultiSelectRe
       if (!isDrawingRef.current) return
       if (e.pointerId !== pointerIdRef.current) return
 
+      const svg = svgRef.current
+      if (!svg) return
+
       const rect = svg.getBoundingClientRect()
       const x = e.clientX - rect.left
       const y = e.clientY - rect.top
@@ -200,6 +210,9 @@ export function useMultiSelect(options: UseMultiSelectOptions): UseMultiSelectRe
     const onPointerUp = (e: PointerEvent) => {
       if (!isDrawingRef.current) return
       if (e.pointerId !== pointerIdRef.current) return
+
+      const svg = svgRef.current
+      if (!svg) return
 
       const rect = svg.getBoundingClientRect()
       const x = e.clientX - rect.left
@@ -247,22 +260,22 @@ export function useMultiSelect(options: UseMultiSelectOptions): UseMultiSelectRe
       pointerIdRef.current = null
 
       try {
-        svg.releasePointerCapture(e.pointerId)
+        container.releasePointerCapture(e.pointerId)
       } catch {
         // ignore
       }
     }
 
-    svg.addEventListener('pointerdown', onPointerDown)
-    svg.addEventListener('pointermove', onPointerMove)
-    svg.addEventListener('pointerup', onPointerUp)
+    container.addEventListener('pointerdown', onPointerDown)
+    container.addEventListener('pointermove', onPointerMove)
+    container.addEventListener('pointerup', onPointerUp)
 
     return () => {
-      svg.removeEventListener('pointerdown', onPointerDown)
-      svg.removeEventListener('pointermove', onPointerMove)
-      svg.removeEventListener('pointerup', onPointerUp)
+      container.removeEventListener('pointerdown', onPointerDown)
+      container.removeEventListener('pointermove', onPointerMove)
+      container.removeEventListener('pointerup', onPointerUp)
     }
-  }, [enabled, svgRef, viewport, nodesRef])
+  }, [enabled, containerRef, svgRef, viewport, nodesRef])
 
   return {
     selectedIds,

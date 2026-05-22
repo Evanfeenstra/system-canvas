@@ -21,6 +21,8 @@ interface UseMultiSelectClipboardOptions {
   onNodeAdd: (node: CanvasNode, canvasRef: string | undefined) => void
   onEdgeAdd: (edge: CanvasEdge, canvasRef: string | undefined) => void
   canvasRef: string | undefined
+  /** Returns the cursor position in SVG-relative screen coords, or null. */
+  getCursorScreenPos?: () => { x: number; y: number } | null
 }
 
 export function useMultiSelectClipboard(options: UseMultiSelectClipboardOptions): void {
@@ -32,7 +34,11 @@ export function useMultiSelectClipboard(options: UseMultiSelectClipboardOptions)
     onNodeAdd,
     onEdgeAdd,
     canvasRef,
+    getCursorScreenPos,
   } = options
+
+  const getCursorScreenPosRef = useRef(getCursorScreenPos)
+  getCursorScreenPosRef.current = getCursorScreenPos
 
   // Keep latest callbacks in refs so the document handler never goes stale
   const onNodeAddRef = useRef(onNodeAdd)
@@ -113,22 +119,19 @@ export function useMultiSelectClipboard(options: UseMultiSelectClipboardOptions)
         const clusterCx = (minX + maxX) / 2
         const clusterCy = (minY + maxY) / 2
 
-        // Compute current viewport center in canvas-space
+        // Paste at the cursor position when available, otherwise fall back
+        // to the viewport origin with a small offset.
         const vp = viewport.current ?? { x: 0, y: 0, zoom: 1 }
-        // The viewport center is at (containerWidth/2, containerHeight/2) in
-        // screen-space. We don't have the container size here, so we use the
-        // document center as a reasonable approximation. Using (0,0) in
-        // SVG-relative screen coords translates to a point in canvas-space;
-        // we want the actual center. As a pragmatic fallback we paste offset
-        // by a fixed delta so the user can see the pasted nodes immediately.
-        const pasteOffsetX = 40
-        const pasteOffsetY = 40
-
-        // Translate each node so the cluster center lands at the current
-        // canvas center (approximated by viewport origin + a small offset)
-        const viewportCenterCanvas = screenToCanvas(0, 0, vp)
-        const dx = viewportCenterCanvas.x - clusterCx + pasteOffsetX
-        const dy = viewportCenterCanvas.y - clusterCy + pasteOffsetY
+        const cursorScreen = getCursorScreenPosRef.current?.()
+        let targetCanvas: { x: number; y: number }
+        if (cursorScreen) {
+          targetCanvas = screenToCanvas(cursorScreen.x, cursorScreen.y, vp)
+        } else {
+          targetCanvas = screenToCanvas(0, 0, vp)
+          targetCanvas = { x: targetCanvas.x + 40, y: targetCanvas.y + 40 }
+        }
+        const dx = targetCanvas.x - clusterCx
+        const dy = targetCanvas.y - clusterCy
 
         const clonedNodes: CanvasNode[] = srcNodes.map(n => ({
           ...structuredClone(n),
