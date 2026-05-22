@@ -102,7 +102,7 @@ interface ViewportProps {
 
   // Editable
   onNodePointerDown?: (node: ResolvedNode, event: React.PointerEvent) => void
-  selectedId?: string | null
+  selectedIds?: Set<string> | null
   editingId?: string | null
   selectedEdgeId?: string | null
   editingEdgeId?: string | null
@@ -114,6 +114,16 @@ interface ViewportProps {
    * progress, no hover, or the predicate rejected the current hover.
    */
   dropTargetId?: string | null
+  /**
+   * Multi-select marquee rectangle in screen-space (SVG-relative coordinates).
+   * Rendered as a semi-transparent overlay outside the transform group.
+   */
+  marqueeRect?: { x1: number; y1: number; x2: number; y2: number } | null
+  /**
+   * Ref that is `true` while the user holds Space to draw a marquee.
+   * Threaded into `useViewport` to suppress d3-zoom panning during marquee.
+   */
+  marqueeActiveRef?: React.RefObject<boolean>
   resizeOverrides?: Map<string, ResizeOverride>
   onResizeHandlePointerDown?: (
     node: ResolvedNode,
@@ -184,12 +194,14 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
       onNodeContextMenu,
       onEdgeContextMenu,
       onNodePointerDown,
-      selectedId,
+      selectedIds,
       editingId,
       selectedEdgeId,
       editingEdgeId,
       dragOverrides,
       dropTargetId,
+      marqueeRect,
+      marqueeActiveRef,
       resizeOverrides,
       onResizeHandlePointerDown,
       onEditorCommit,
@@ -213,6 +225,7 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
         maxZoom,
         defaultViewport,
         onViewportChange,
+        marqueeActiveRef,
       })
 
     // Track whether a zoom-to-node navigation just happened.
@@ -556,7 +569,7 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
             onContextMenu={onNodeContextMenu}
             onNavigate={onNodeNavigate}
             onPointerDown={onNodePointerDown}
-            selectedId={selectedId}
+            selectedIds={selectedIds}
             editingId={editingId}
             canvases={canvases}
             only="groups"
@@ -586,7 +599,7 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
             onContextMenu={onNodeContextMenu}
             onNavigate={onNodeNavigate}
             onPointerDown={onNodePointerDown}
-            selectedId={selectedId}
+            selectedIds={selectedIds}
             editingId={editingId}
             onResizeHandlePointerDown={onResizeHandlePointerDown}
             canvases={canvases}
@@ -633,6 +646,31 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
               pointerEvents="none"
             />
           )}
+
+          {/* Selection halos for multi-select (and single-select).
+              One halo rect per selected node id, rendered above all other
+              node/edge content so the ring is always visible. Mirrors the
+              dropTargetNode halo pattern. */}
+          {selectedIds && selectedIds.size > 0 &&
+            Array.from(selectedIds).map((id) => {
+              const node = renderNodeMap.get(id)
+              if (!node) return null
+              return (
+                <rect
+                  key={`halo-${id}`}
+                  x={node.x - 3}
+                  y={node.y - 3}
+                  width={node.width + 6}
+                  height={node.height + 6}
+                  rx={(node.resolvedCornerRadius ?? 0) + 3}
+                  fill="none"
+                  stroke={theme.node.labelColor}
+                  strokeWidth={1.5}
+                  opacity={0.7}
+                  pointerEvents="none"
+                />
+              )
+            })}
 
           {/* Ghost edge preview during edge-creation drag */}
           {pendingEdge && pendingSourceNode && (
@@ -681,6 +719,22 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
               />
             )}
         </g>
+
+        {/* Marquee selection rectangle — screen-space overlay outside the
+            transform group so it doesn't pan/zoom with the canvas content. */}
+        {marqueeRect && (
+          <rect
+            x={Math.min(marqueeRect.x1, marqueeRect.x2)}
+            y={Math.min(marqueeRect.y1, marqueeRect.y2)}
+            width={Math.abs(marqueeRect.x2 - marqueeRect.x1)}
+            height={Math.abs(marqueeRect.y2 - marqueeRect.y1)}
+            fill={theme.node.labelColor + '18'}
+            stroke={theme.node.labelColor}
+            strokeWidth={1}
+            opacity={0.9}
+            pointerEvents="none"
+          />
+        )}
       </svg>
     )
   }

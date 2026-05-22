@@ -52,6 +52,15 @@ interface NodeToolbarProps {
   containerHeight: number
   /** Optional full override of the toolbar UI. */
   render?: (props: NodeToolbarRenderProps) => React.ReactNode
+  /**
+   * When provided and length > 1, the toolbar renders a multi-selection
+   * variant (count label + shared actions) instead of the single-node toolbar.
+   */
+  selectedNodes?: ResolvedNode[]
+  /**
+   * Called when a multi-select action fires — applied to every selected node.
+   */
+  onMultiPatch?: (patch: NodeUpdate) => void
 }
 
 /**
@@ -77,6 +86,8 @@ export function NodeToolbar({
   containerWidth,
   containerHeight,
   render,
+  selectedNodes,
+  onMultiPatch,
 }: NodeToolbarProps) {
   const [viewport, setViewport] = useState<ViewportState>(() => getViewport())
 
@@ -99,23 +110,34 @@ export function NodeToolbar({
     return () => cancelAnimationFrame(raf)
   }, [getViewport])
 
-  // Anchor x in canvas space depends on the configured alignment. Default is
-  // 'center' (the toolbar centers over the node); 'left' anchors the toolbar's
-  // left edge to the node's left edge, 'right' anchors its right edge to the
-  // node's right edge. y is always the node's top / bottom edge.
+  // When in multi-select mode, anchor over the bounding box of all selected
+  // nodes. Otherwise use the single-node anchor with the theme alignment.
+  const isMulti = selectedNodes != null && selectedNodes.length > 1
   const align = theme.toolbarAlign ?? 'center'
-  const anchorCanvasX =
-    align === 'left'
-      ? node.x
-      : align === 'right'
-        ? node.x + node.width
-        : node.x + node.width / 2
-  const topAnchor = canvasToScreen(anchorCanvasX, node.y, viewport)
-  const bottomAnchor = canvasToScreen(
-    anchorCanvasX,
-    node.y + node.height,
-    viewport
-  )
+
+  const { anchorTopY, anchorBottomY, anchorX } = useMemo(() => {
+    if (isMulti && selectedNodes) {
+      const minX = Math.min(...selectedNodes.map((n) => n.x))
+      const maxX = Math.max(...selectedNodes.map((n) => n.x + n.width))
+      const minY = Math.min(...selectedNodes.map((n) => n.y))
+      const maxY = Math.max(...selectedNodes.map((n) => n.y + n.height))
+      return {
+        anchorX: (minX + maxX) / 2,
+        anchorTopY: minY,
+        anchorBottomY: maxY,
+      }
+    }
+    const x =
+      align === 'left'
+        ? node.x
+        : align === 'right'
+          ? node.x + node.width
+          : node.x + node.width / 2
+    return { anchorX: x, anchorTopY: node.y, anchorBottomY: node.y + node.height }
+  }, [isMulti, selectedNodes, align, node])
+
+  const topAnchor = canvasToScreen(anchorX, anchorTopY, viewport)
+  const bottomAnchor = canvasToScreen(anchorX, anchorBottomY, viewport)
 
   // Measure the toolbar's actual screen size so we can center it over the
   // node and flip it below when near the top of the viewport.
@@ -152,15 +174,19 @@ export function NodeToolbar({
     return () => ro.disconnect()
   }, [])
 
-  // Resolve `left` from the anchor based on alignment. With 'center' the
-  // toolbar's center sits over the anchor; with 'left' / 'right' the
-  // corresponding edge of the toolbar sits over the anchor.
-  let left =
-    align === 'left'
-      ? topAnchor.x
-      : align === 'right'
-        ? topAnchor.x - size.width
-        : topAnchor.x - size.width / 2
+  // Resolve `left` from the anchor. Multi-select always centers; single node
+  // respects the configured alignment.
+  let left: number
+  if (isMulti) {
+    left = topAnchor.x - size.width / 2
+  } else {
+    left =
+      align === 'left'
+        ? topAnchor.x
+        : align === 'right'
+          ? topAnchor.x - size.width
+          : topAnchor.x - size.width / 2
+  }
   let top = topAnchor.y - size.height - NODE_GAP
 
   // Flip below the node if it would clip the top of the viewport.
@@ -205,7 +231,14 @@ export function NodeToolbar({
         whiteSpace: 'nowrap',
       }}
     >
-      {render ? (
+      {isMulti && selectedNodes && onMultiPatch ? (
+        <MultiToolbarContent
+          selectedNodes={selectedNodes}
+          theme={theme}
+          onMultiPatch={onMultiPatch}
+          onDelete={deleteNode}
+        />
+      ) : render ? (
         render({ node, theme, patch, deleteNode })
       ) : (
         <DefaultToolbarContent
@@ -216,6 +249,118 @@ export function NodeToolbar({
         />
       )}
     </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Multi-select toolbar content
+// ---------------------------------------------------------------------------
+
+interface MultiToolbarContentProps {
+  selectedNodes: ResolvedNode[]
+  theme: CanvasTheme
+  onMultiPatch: (patch: NodeUpdate) => void
+  onDelete: () => void
+}
+
+function MultiToolbarContent({
+  selectedNodes,
+  theme,
+  onMultiPatch,
+  onDelete,
+}: MultiToolbarContentProps) {
+  // Use the first node as the representative for action resolution.
+  const representativeNode = selectedNodes[0]
+  const groups = useMemo(
+    () => getNodeActionsForNode(representativeNode, theme),
+    [representativeNode, theme]
+  )
+  const showDelete = theme.showToolbarDelete === true
+
+  // Collect swatch and category actions from all groups.
+  const swatchGroups = groups.filter((g) => g.kind === 'swatches' || g.kind == null)
+  const otherGroups = groups.filter((g) => g.kind !== 'swatches' && g.kind != null && g.kind !== 'menu')
+
+  return (
+    <>
+      {/* Count label */}
+      <span
+        style={{
+          fontSize: 11,
+          color: theme.breadcrumbs.textColor,
+          opacity: 0.75,
+          paddingRight: BUTTON_GAP,
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {selectedNodes.length} nodes
+      </span>
+
+      {/* Swatch actions — each fires onMultiPatch */}
+      {swatchGroups.map((group, i) => {
+        const actions = filterActionsForNode(group, representativeNode)
+        if (actions.length === 0) return null
+        return (
+          <React.Fragment key={group.id}>
+            {i > 0 && <Divider theme={theme} />}
+            <div style={{ display: 'flex', alignItems: 'center', gap: BUTTON_GAP }}>
+              {actions.map((action) => {
+                const active = action.isActive?.(representativeNode) ?? false
+                const handleClick = () => {
+                  const patch = resolveActionPatch(action, representativeNode)
+                  onMultiPatch(patch)
+                }
+                return (
+                  <SwatchButton
+                    key={action.id}
+                    action={action}
+                    active={active}
+                    theme={theme}
+                    onClick={handleClick}
+                  />
+                )
+              })}
+            </div>
+          </React.Fragment>
+        )
+      })}
+
+      {/* Other button-style actions (e.g. category buttons) */}
+      {otherGroups.map((group) => {
+        const actions = filterActionsForNode(group, representativeNode)
+        if (actions.length === 0) return null
+        return (
+          <React.Fragment key={group.id}>
+            <Divider theme={theme} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: BUTTON_GAP }}>
+              {actions.map((action) => {
+                const active = action.isActive?.(representativeNode) ?? false
+                const handleClick = () => {
+                  const patch = resolveActionPatch(action, representativeNode)
+                  onMultiPatch(patch)
+                }
+                return (
+                  <IconButton
+                    key={action.id}
+                    action={action}
+                    active={active}
+                    theme={theme}
+                    onClick={handleClick}
+                  />
+                )
+              })}
+            </div>
+          </React.Fragment>
+        )
+      })}
+
+      {showDelete && (
+        <>
+          <Divider theme={theme} />
+          <DeleteButton theme={theme} onDelete={onDelete} />
+        </>
+      )}
+    </>
   )
 }
 

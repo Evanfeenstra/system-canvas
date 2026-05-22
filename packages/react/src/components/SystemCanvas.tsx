@@ -40,6 +40,8 @@ import { useCanvasInteraction } from '../hooks/useCanvasInteraction.js'
 import { useNodeDrag } from '../hooks/useNodeDrag.js'
 import { useNodeResize } from '../hooks/useNodeResize.js'
 import { useEdgeCreate } from '../hooks/useEdgeCreate.js'
+import { useMultiSelect } from '../hooks/useMultiSelect.js'
+import { useMultiSelectClipboard } from '../hooks/useMultiSelectClipboard.js'
 import {
   useZoomNavigation,
   type ParentFrame,
@@ -180,6 +182,12 @@ export interface SystemCanvasProps {
     canvasRef: string | undefined
   ) => void
   onNodeDelete?: (nodeId: string, canvasRef: string | undefined) => void
+  /**
+   * Bulk delete callback — fired when the user presses Delete/Backspace with
+   * 2+ nodes selected. Receives all selected node IDs at once so consumers
+   * can batch-remove them in a single transaction.
+   */
+  onNodesDelete?: (nodeIds: string[], canvasRef: string | undefined) => void
   onEdgeUpdate?: (
     edgeId: string,
     patch: EdgeUpdate,
@@ -381,6 +389,7 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
       onNodeUpdate,
       onNodesUpdate,
       onNodeDelete,
+      onNodesDelete,
       onEdgeUpdate,
       onEdgeDelete,
       onEdgeAdd,
@@ -621,17 +630,67 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
   )
 
   // Selection + editing state (editable mode)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
   const [editingEdgeId, setEditingEdgeId] = useState<string | null>(null)
 
+  // Proxy ref for the SVG element — declared early so both useMultiSelect,
+  // useNodeDrag, and useEdgeCreate can all share it. The `.current` assignment
+  // runs every render further below; hooks read it lazily at gesture time.
+  const svgProxyRef = useRef<SVGSVGElement | null>(null)
+
+  // Container div ref — needed by useMultiSelect for keyboard event listeners
+  // and by lane-header/size tracking below.
+  const containerRef = useRef<HTMLDivElement | null>(null)
+
+  // Multi-select hook — owns selectedIds, marquee drawing, Cmd+A
+  const {
+    selectedIds,
+    selectNode,
+    toggleNode,
+    selectAll,
+    clearSelection,
+    marqueeRect,
+    marqueeActiveRef,
+  } = useMultiSelect({
+    svgRef: svgProxyRef,
+    viewport: viewportStateRef,
+    nodesRef,
+    containerRef,
+    enabled: editable,
+  })
+
+  // Mirror selectedIds into a ref so clipboard and drag hooks read latest
+  const selectedIdsRef = useRef<Set<string>>(selectedIds)
+  useEffect(() => {
+    selectedIdsRef.current = selectedIds
+  }, [selectedIds])
+
+  // Mirror edges into a ref for the clipboard hook
+  const edgesRef = useRef<typeof edges>(edges)
+  useEffect(() => {
+    edgesRef.current = edges
+  }, [edges])
+
+  // Clipboard: Cmd+C / Cmd+V
+  useMultiSelectClipboard({
+    selectedIdsRef,
+    nodesRef: nodesRef as React.RefObject<CanvasNode[]>,
+    edgesRef,
+    viewport: viewportStateRef,
+    canvasContainerRef: containerRef,
+    onNodeAdd: (node) => onNodeAdd?.(node, currentCanvasRef),
+    onEdgeAdd: (edge) => onEdgeAdd?.(edge, currentCanvasRef),
+    canvasRef: currentCanvasRef,
+  })
+
   // Clear selection/editing when navigating between canvases
   useEffect(() => {
-    setSelectedId(null)
+    clearSelection()
     setEditingId(null)
     setSelectedEdgeId(null)
     setEditingEdgeId(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentCanvasRef])
 
   // Unified selection-change emission. Watches both id slots and emits
@@ -666,43 +725,65 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
   }, [onSelectionChange])
 
   const lastEmittedSelectionRef = useRef<{
-    kind: 'node' | 'edge' | null
+    kind: 'node' | 'edge' | 'multi' | null
     id: string | null
+    // For 'multi': sorted comma-joined id list for dedup
+    multiIds: string | null
     canvasRef: string | undefined
-  }>({ kind: null, id: null, canvasRef: undefined })
+  }>({ kind: null, id: null, multiIds: null, canvasRef: undefined })
 
   useEffect(() => {
     const cb = onSelectionChangeRef.current
     let next: CanvasSelection = null
-    if (selectedId) {
-      const node = nodeMap.get(selectedId)
+
+    if (selectedIds.size > 1) {
+      const resolvedNodes: ResolvedNode[] = []
+      for (const id of selectedIds) {
+        const n = nodeMap.get(id)
+        if (n) resolvedNodes.push(n)
+      }
+      if (resolvedNodes.length > 0) {
+        next = { kind: 'multi', nodes: resolvedNodes, canvasRef: currentCanvasRef }
+      }
+    } else if (selectedIds.size === 1) {
+      const id = Array.from(selectedIds)[0]
+      const node = nodeMap.get(id)
       if (node) next = { kind: 'node', node, canvasRef: currentCanvasRef }
     }
+
     if (!next && selectedEdgeId) {
       const edge = edges.find((e) => e.id === selectedEdgeId)
       if (edge) next = { kind: 'edge', edge, canvasRef: currentCanvasRef }
     }
+
     const last = lastEmittedSelectionRef.current
     const nextKind = next?.kind ?? null
-    const nextId = next ? (next.kind === 'node' ? next.node.id : next.edge.id) : null
     const nextRef = next?.canvasRef
-    if (
-      last.kind === nextKind &&
-      last.id === nextId &&
-      last.canvasRef === nextRef
-    ) {
-      return
+
+    if (nextKind === 'multi' && next?.kind === 'multi') {
+      const sortedIds = next.nodes.map((n) => n.id).sort().join(',')
+      if (last.kind === 'multi' && last.multiIds === sortedIds && last.canvasRef === nextRef) {
+        return
+      }
+      lastEmittedSelectionRef.current = { kind: 'multi', id: null, multiIds: sortedIds, canvasRef: nextRef }
+    } else {
+      const nextId = next
+        ? next.kind === 'node'
+          ? next.node.id
+          : next.kind === 'edge'
+            ? next.edge.id
+            : null
+        : null
+      if (last.kind === nextKind && last.id === nextId && last.canvasRef === nextRef) {
+        return
+      }
+      lastEmittedSelectionRef.current = { kind: nextKind, id: nextId, multiIds: null, canvasRef: nextRef }
     }
-    lastEmittedSelectionRef.current = {
-      kind: nextKind,
-      id: nextId,
-      canvasRef: nextRef,
-    }
+
     cb?.(next)
-  }, [selectedId, selectedEdgeId, currentCanvasRef, nodeMap, edges])
+  }, [selectedIds, selectedEdgeId, currentCanvasRef, nodeMap, edges])
 
   // Container size — tracked so the lane-header overlay can size itself.
-  const containerRef = useRef<HTMLDivElement | null>(null)
   const [containerSize, setContainerSize] = useState<{ width: number; height: number }>(
     { width: 0, height: 0 }
   )
@@ -810,14 +891,6 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
     [onNodeUpdate, onNodesUpdate, currentCanvasRef, applyLaneSnap]
   )
 
-  // Proxy ref pointing at the SVG element exposed by the viewport handle.
-  // Declared up here so `useNodeDrag` (drop-on-node hit-test) and
-  // `useEdgeCreate` (cursor-tracking) can both share it. The `.current`
-  // assignment runs every render below, after the viewport handle is
-  // populated; both hooks read `.current` lazily at gesture time, so
-  // declaration-vs-assignment ordering is fine.
-  const svgProxyRef = useRef<SVGSVGElement | null>(null)
-
   const handleNodeDrop = useCallback(
     (sources: CanvasNode[], target: CanvasNode) => {
       onNodeDrop?.(sources, target, { canvasRef: currentCanvasRef })
@@ -836,6 +909,7 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
     svgRef: svgProxyRef,
     canDropNodeOn,
     onNodeDrop: handleNodeDrop,
+    selectedIdsRef,
   })
 
   const { resizeOverrides, onHandlePointerDown: onResizeHandlePointerDown } =
@@ -845,21 +919,24 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
     })
 
   // Selected node with live drag/resize overrides applied — used to position
-  // the floating node toolbar so it tracks the node as the user drags it.
+  // the floating single-node toolbar and resize handles.
+  // Only resolved when exactly one node is selected.
+  const singleSelectedId = selectedIds.size === 1 ? Array.from(selectedIds)[0] : null
   const selectedResolvedNode = useMemo<ResolvedNode | null>(() => {
-    if (!selectedId) return null
-    const base = nodeMap.get(selectedId)
+    if (!singleSelectedId) return null
+    const base = nodeMap.get(singleSelectedId)
     if (!base) return null
-    const resize = resizeOverrides.get(selectedId)
+    const resize = resizeOverrides.get(singleSelectedId)
     if (resize) {
       return { ...base, x: resize.x, y: resize.y, width: resize.width, height: resize.height }
     }
-    const drag = dragOverrides.get(selectedId)
+    const drag = dragOverrides.get(singleSelectedId)
     if (drag) {
       return { ...base, x: drag.x, y: drag.y }
     }
     return base
-  }, [selectedId, nodeMap, dragOverrides, resizeOverrides])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [singleSelectedId, nodeMap, dragOverrides, resizeOverrides])
 
   // Keep the proxy SVG ref pointed at the viewport's current SVG element.
   // Runs every render so useEdgeCreate / useNodeDrag both see the latest.
@@ -1087,7 +1164,8 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
     onNavigableNodeClick: handleNavigableNodeClick,
     viewport: viewportStateRef,
     editable,
-    onSelect: setSelectedId,
+    onSelect: (id: string | null) => { if (id) selectNode(id); else clearSelection() },
+    onToggleSelect: toggleNode,
     onBeginEdit: handleBeginEdit,
     onSelectEdge: setSelectedEdgeId,
     onBeginEditEdge: handleBeginEditEdge,
@@ -1179,23 +1257,34 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
     [onNodeAdd, currentCanvasRef, theme]
   )
 
-  // Keyboard: Delete/Backspace removes selected node/edge; Escape clears selection/editing
+  // Keyboard: Delete/Backspace removes selected node/edge; Escape clears selection/editing;
+  // Cmd+A selects all nodes.
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
       if (!editable) return
       if (e.key === 'Escape') {
         setEditingId(null)
-        setSelectedId(null)
+        clearSelection()
         setEditingEdgeId(null)
         setSelectedEdgeId(null)
         return
       }
       if (editingId || editingEdgeId) return // let the editor own the keys
+      if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
+        e.preventDefault()
+        selectAll()
+        return
+      }
       if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (selectedId) {
+        if (selectedIds.size > 1) {
           e.preventDefault()
-          onNodeDelete?.(selectedId, currentCanvasRef)
-          setSelectedId(null)
+          onNodesDelete?.(Array.from(selectedIds), currentCanvasRef)
+          clearSelection()
+        } else if (selectedIds.size === 1) {
+          const id = Array.from(selectedIds)[0]
+          e.preventDefault()
+          onNodeDelete?.(id, currentCanvasRef)
+          clearSelection()
         } else if (selectedEdgeId) {
           e.preventDefault()
           onEdgeDelete?.(selectedEdgeId, currentCanvasRef)
@@ -1207,11 +1296,14 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
       editable,
       editingId,
       editingEdgeId,
-      selectedId,
+      selectedIds,
       selectedEdgeId,
       onNodeDelete,
+      onNodesDelete,
       onEdgeDelete,
       currentCanvasRef,
+      clearSelection,
+      selectAll,
     ]
   )
 
@@ -1291,7 +1383,9 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
         onNodeContextMenu={handleNodeContextMenu}
         onEdgeContextMenu={handleEdgeContextMenu}
         onNodePointerDown={editable ? onNodePointerDown : undefined}
-        selectedId={editable ? selectedId : null}
+        selectedIds={editable ? selectedIds : undefined}
+        marqueeRect={editable ? marqueeRect : null}
+        marqueeActiveRef={editable ? marqueeActiveRef : undefined}
         editingId={editable ? editingId : null}
         selectedEdgeId={editable ? selectedEdgeId : null}
         editingEdgeId={editable ? editingEdgeId : null}
@@ -1323,8 +1417,8 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
         />
       )}
 
-      {/* Floating node toolbar (above the selected node, editable mode only) */}
-      {editable && showNodeToolbar && selectedResolvedNode && !editingId && (
+      {/* Floating node toolbar — single-node selection */}
+      {editable && showNodeToolbar && selectedIds.size === 1 && selectedResolvedNode && !editingId && (
         <NodeToolbar
           node={selectedResolvedNode}
           theme={theme}
@@ -1333,7 +1427,7 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
           }}
           onDelete={() => {
             onNodeDelete?.(selectedResolvedNode.id, currentCanvasRef)
-            setSelectedId(null)
+            clearSelection()
           }}
           getViewport={getViewportState}
           containerWidth={containerSize.width}
@@ -1341,6 +1435,35 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
           render={renderNodeToolbar}
         />
       )}
+
+      {/* Floating multi-select toolbar — 2+ nodes selected */}
+      {editable && showNodeToolbar && selectedIds.size > 1 && !editingId && (() => {
+        const selectedResolvedNodes = Array.from(selectedIds)
+          .map((id) => nodeMap.get(id))
+          .filter((n): n is ResolvedNode => n != null)
+        if (selectedResolvedNodes.length === 0) return null
+        const anchorNode = selectedResolvedNodes[0]
+        return (
+          <NodeToolbar
+            node={anchorNode}
+            selectedNodes={selectedResolvedNodes}
+            theme={theme}
+            onPatch={() => {}}
+            onMultiPatch={(patch) => {
+              for (const id of selectedIds) {
+                onNodeUpdate?.(id, patch, currentCanvasRef)
+              }
+            }}
+            onDelete={() => {
+              onNodesDelete?.(Array.from(selectedIds), currentCanvasRef)
+              clearSelection()
+            }}
+            getViewport={getViewportState}
+            containerWidth={containerSize.width}
+            containerHeight={containerSize.height}
+          />
+        )
+      })()}
 
       {/* Add-node FAB (editable only) */}
       {editable &&

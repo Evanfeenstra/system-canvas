@@ -21,7 +21,7 @@ interface NodeRendererProps {
   onContextMenu: (node: ResolvedNode, event: React.MouseEvent) => void
   onNavigate: (node: ResolvedNode, event: React.MouseEvent) => void
   onPointerDown?: (node: ResolvedNode, event: React.PointerEvent) => void
-  selectedId?: string | null
+  selectedIds?: Set<string> | null
   editingId?: string | null
   onResizeHandlePointerDown?: (
     node: ResolvedNode,
@@ -64,7 +64,7 @@ export function NodeRenderer({
   onContextMenu,
   onNavigate,
   onPointerDown,
-  selectedId,
+  selectedIds,
   editingId,
   onResizeHandlePointerDown,
   canvases,
@@ -88,7 +88,7 @@ export function NodeRenderer({
       onContextMenu,
       onNavigate,
       onPointerDown,
-      isSelected: selectedId === node.id,
+      isSelected: selectedIds?.has(node.id) ?? false,
       isEditing: editingId === node.id,
       slots,
       canvases,
@@ -100,9 +100,13 @@ export function NodeRenderer({
     }
   }
 
+  // Resize handles only make sense for a single selected node.
+  // With multi-select (2+ nodes), resize is disabled.
+  const singleSelectedId =
+    selectedIds?.size === 1 ? Array.from(selectedIds)[0] : null
   const selectedNode =
-    selectedId && editingId !== selectedId
-      ? nodes.find((n) => n.id === selectedId)
+    singleSelectedId && editingId !== singleSelectedId
+      ? nodes.find((n) => n.id === singleSelectedId)
       : undefined
 
   // Resize handles belong on the topmost layer: only render them when we're
