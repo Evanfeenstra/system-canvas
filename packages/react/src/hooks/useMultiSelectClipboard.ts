@@ -23,6 +23,8 @@ interface UseMultiSelectClipboardOptions {
   canvasRef: string | undefined
   /** Returns the cursor position in SVG-relative screen coords, or null. */
   getCursorScreenPos?: () => { x: number; y: number } | null
+  onBeginBatch?: () => void
+  onEndBatch?: () => void
 }
 
 export function useMultiSelectClipboard(options: UseMultiSelectClipboardOptions): void {
@@ -35,6 +37,8 @@ export function useMultiSelectClipboard(options: UseMultiSelectClipboardOptions)
     onEdgeAdd,
     canvasRef,
     getCursorScreenPos,
+    onBeginBatch,
+    onEndBatch,
   } = options
 
   const getCursorScreenPosRef = useRef(getCursorScreenPos)
@@ -47,6 +51,10 @@ export function useMultiSelectClipboard(options: UseMultiSelectClipboardOptions)
   onEdgeAddRef.current = onEdgeAdd
   const canvasRefRef = useRef(canvasRef)
   canvasRefRef.current = canvasRef
+  const onBeginBatchRef = useRef(onBeginBatch)
+  onBeginBatchRef.current = onBeginBatch
+  const onEndBatchRef = useRef(onEndBatch)
+  onEndBatchRef.current = onEndBatch
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -152,12 +160,14 @@ export function useMultiSelectClipboard(options: UseMultiSelectClipboardOptions)
           }))
 
         const ref = canvasRefRef.current
+        onBeginBatchRef.current?.()
         for (const node of clonedNodes) {
           onNodeAddRef.current(node, ref)
         }
         for (const edge of clonedEdges) {
           onEdgeAddRef.current(edge, ref)
         }
+        onEndBatchRef.current?.()
 
         e.preventDefault()
         return
