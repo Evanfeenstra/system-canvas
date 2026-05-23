@@ -88,6 +88,8 @@ interface UseNodeDragResult {
   /** Attach this as the node component's onPointerDown */
   onPointerDown: (node: ResolvedNode, event: React.PointerEvent) => void
   isDragging: boolean
+  /** Cancel any in-progress drag without committing the position change. No-op when no drag is active. */
+  cancelDrag: () => void
 }
 
 interface DragState {
@@ -373,5 +375,9 @@ export function useNodeDrag(options: UseNodeDragOptions): UseNodeDragResult {
     [nodesRef, onPointerMove, onPointerUp, onPointerCancel]
   )
 
-  return { dragOverrides, dropTargetId, onPointerDown, isDragging }
+  const cancelDrag = useCallback(() => {
+    if (stateRef.current) finishDrag(false)
+  }, [finishDrag])
+
+  return { dragOverrides, dropTargetId, onPointerDown, isDragging, cancelDrag }
 }
