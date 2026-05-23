@@ -155,6 +155,10 @@ export {
   removeEdge,
 } from './canvas.js'
 
+export { snapToGrid } from './grid.js'
+export type { AlignmentGuide } from './alignment.js'
+export { computeAlignmentGuides, alignNodes, distributeNodes } from './alignment.js'
+
 // Convenience theme collection
 import { darkTheme as _dark } from './themes/dark.js'
 import { midnightTheme as _midnight } from './themes/midnight.js'
