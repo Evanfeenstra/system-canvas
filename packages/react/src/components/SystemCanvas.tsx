@@ -42,6 +42,7 @@ import { useNodeResize } from '../hooks/useNodeResize.js'
 import { useEdgeCreate } from '../hooks/useEdgeCreate.js'
 import { useMultiSelect } from '../hooks/useMultiSelect.js'
 import { useMultiSelectClipboard } from '../hooks/useMultiSelectClipboard.js'
+import { useCommandHistory } from '../hooks/useCommandHistory.js'
 import {
   useZoomNavigation,
   type ParentFrame,
@@ -333,6 +334,14 @@ export interface SystemCanvasProps {
    */
   zoomNavigation?: boolean | ZoomNavigationConfig
 
+  // --- History ---
+  /** Maximum undo/redo history depth. Defaults to 50. Only active when editable=true. */
+  historyDepth?: number
+  /** Called after an undo step. Receives the canvasRef that was affected. */
+  onUndo?: (canvasRef: string | undefined) => void
+  /** Called after a redo step. Receives the canvasRef that was affected. */
+  onRedo?: (canvasRef: string | undefined) => void
+
   // --- Styling ---
   className?: string
   style?: React.CSSProperties
@@ -409,6 +418,9 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
       laneHeaders = 'pinned',
       snapToLanes = false,
       zoomNavigation = false,
+      historyDepth,
+      onUndo,
+      onRedo,
       className,
       style,
     },
@@ -672,6 +684,37 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
     edgesRef.current = edges
   }, [edges])
 
+  // Command history — undo/redo stack for all mutations
+  const {
+    wrappedOnNodeAdd,
+    wrappedOnNodeUpdate,
+    wrappedOnNodesUpdate,
+    wrappedOnNodeDelete,
+    wrappedOnNodesDelete,
+    wrappedOnEdgeAdd,
+    wrappedOnEdgeUpdate,
+    wrappedOnEdgeDelete,
+    beginBatch,
+    endBatch,
+    undo,
+    redo,
+  } = useCommandHistory({
+    nodesRef: nodesRef as React.RefObject<CanvasNode[]>,
+    edgesRef,
+    onNodeAdd,
+    onNodeUpdate,
+    onNodesUpdate,
+    onNodeDelete,
+    onNodesDelete,
+    onEdgeAdd,
+    onEdgeUpdate,
+    onEdgeDelete,
+    maxDepth: historyDepth ?? 50,
+    enabled: editable,
+    onUndo,
+    onRedo,
+  })
+
   // Clipboard: Cmd+C / Cmd+V
   useMultiSelectClipboard({
     selectedIdsRef,
@@ -679,10 +722,12 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
     edgesRef,
     viewport: viewportStateRef,
     canvasContainerRef: containerRef,
-    onNodeAdd: (node) => onNodeAdd?.(node, currentCanvasRef),
-    onEdgeAdd: (edge) => onEdgeAdd?.(edge, currentCanvasRef),
+    onNodeAdd: (node) => wrappedOnNodeAdd(node, currentCanvasRef),
+    onEdgeAdd: (edge) => wrappedOnEdgeAdd(edge, currentCanvasRef),
     canvasRef: currentCanvasRef,
     getCursorScreenPos: () => viewportHandleRef.current?.getCursorScreenPos() ?? null,
+    onBeginBatch: beginBatch,
+    onEndBatch: endBatch,
   })
 
   // Clear selection/editing when navigating between canvases
@@ -851,9 +896,9 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
 
   const commitResize = useCallback(
     (id: string, patch: NodeUpdate) => {
-      onNodeUpdate?.(id, applyLaneSnap(id, patch), currentCanvasRef)
+      wrappedOnNodeUpdate(id, applyLaneSnap(id, patch), currentCanvasRef)
     },
-    [onNodeUpdate, currentCanvasRef, applyLaneSnap]
+    [wrappedOnNodeUpdate, currentCanvasRef, applyLaneSnap]
   )
 
   // Batched drag commit. Fires once per drag-end with every moved
@@ -881,15 +926,15 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
         patch: applyLaneSnap(u.id, u.patch),
       }))
       if (onNodesUpdate) {
-        onNodesUpdate(final, currentCanvasRef)
+        wrappedOnNodesUpdate(final, currentCanvasRef)
         return
       }
       if (!onNodeUpdate) return
       for (const { id, patch } of final) {
-        onNodeUpdate(id, patch, currentCanvasRef)
+        wrappedOnNodeUpdate(id, patch, currentCanvasRef)
       }
     },
-    [onNodeUpdate, onNodesUpdate, currentCanvasRef, applyLaneSnap]
+    [wrappedOnNodeUpdate, wrappedOnNodesUpdate, onNodeUpdate, onNodesUpdate, currentCanvasRef, applyLaneSnap]
   )
 
   const handleNodeDrop = useCallback(
@@ -945,9 +990,9 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
 
   const handleEdgeCreated = useCallback(
     (edge: CanvasEdge) => {
-      onEdgeAdd?.(edge, currentCanvasRef)
+      wrappedOnEdgeAdd(edge, currentCanvasRef)
     },
-    [onEdgeAdd, currentCanvasRef]
+    [wrappedOnEdgeAdd, currentCanvasRef]
   )
 
   const { pending: pendingEdge, onHandlePointerDown: onConnectionHandlePointerDown } =
@@ -1176,11 +1221,11 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
   const handleEditorCommit = useCallback(
     (patch: NodeUpdate) => {
       if (editingId) {
-        onNodeUpdate?.(editingId, patch, currentCanvasRef)
+        wrappedOnNodeUpdate(editingId, patch, currentCanvasRef)
       }
       setEditingId(null)
     },
-    [editingId, onNodeUpdate, currentCanvasRef]
+    [editingId, wrappedOnNodeUpdate, currentCanvasRef]
   )
   const handleEditorCancel = useCallback(() => {
     setEditingId(null)
@@ -1190,11 +1235,11 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
   const handleEdgeEditorCommit = useCallback(
     (patch: EdgeUpdate) => {
       if (editingEdgeId) {
-        onEdgeUpdate?.(editingEdgeId, patch, currentCanvasRef)
+        wrappedOnEdgeUpdate(editingEdgeId, patch, currentCanvasRef)
       }
       setEditingEdgeId(null)
     },
-    [editingEdgeId, onEdgeUpdate, currentCanvasRef]
+    [editingEdgeId, wrappedOnEdgeUpdate, currentCanvasRef]
   )
   const handleEdgeEditorCancel = useCallback(() => {
     setEditingEdgeId(null)
@@ -1253,9 +1298,9 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
         undefined,
         theme
       )
-      onNodeAdd?.(node, currentCanvasRef)
+      wrappedOnNodeAdd(node, currentCanvasRef)
     },
-    [onNodeAdd, currentCanvasRef, theme]
+    [wrappedOnNodeAdd, currentCanvasRef, theme]
   )
 
   // Keyboard: Delete/Backspace removes selected node/edge; Escape clears selection/editing;
@@ -1271,6 +1316,16 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
         return
       }
       if (editingId || editingEdgeId) return // let the editor own the keys
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key === 'z') {
+        e.preventDefault()
+        undo()
+        return
+      }
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'z') {
+        e.preventDefault()
+        redo()
+        return
+      }
       if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
         e.preventDefault()
         selectAll()
@@ -1279,16 +1334,16 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
       if (e.key === 'Delete' || e.key === 'Backspace') {
         if (selectedIds.size > 1) {
           e.preventDefault()
-          onNodesDelete?.(Array.from(selectedIds), currentCanvasRef)
+          wrappedOnNodesDelete(Array.from(selectedIds), currentCanvasRef)
           clearSelection()
         } else if (selectedIds.size === 1) {
           const id = Array.from(selectedIds)[0]
           e.preventDefault()
-          onNodeDelete?.(id, currentCanvasRef)
+          wrappedOnNodeDelete(id, currentCanvasRef)
           clearSelection()
         } else if (selectedEdgeId) {
           e.preventDefault()
-          onEdgeDelete?.(selectedEdgeId, currentCanvasRef)
+          wrappedOnEdgeDelete(selectedEdgeId, currentCanvasRef)
           setSelectedEdgeId(null)
         }
       }
@@ -1299,12 +1354,14 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
       editingEdgeId,
       selectedIds,
       selectedEdgeId,
-      onNodeDelete,
-      onNodesDelete,
-      onEdgeDelete,
+      wrappedOnNodeDelete,
+      wrappedOnNodesDelete,
+      wrappedOnEdgeDelete,
       currentCanvasRef,
       clearSelection,
       selectAll,
+      undo,
+      redo,
     ]
   )
 
@@ -1424,10 +1481,10 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
           node={selectedResolvedNode}
           theme={theme}
           onPatch={(update) => {
-            onNodeUpdate?.(selectedResolvedNode.id, update, currentCanvasRef)
+            wrappedOnNodeUpdate(selectedResolvedNode.id, update, currentCanvasRef)
           }}
           onDelete={() => {
-            onNodeDelete?.(selectedResolvedNode.id, currentCanvasRef)
+            wrappedOnNodeDelete(selectedResolvedNode.id, currentCanvasRef)
             clearSelection()
           }}
           getViewport={getViewportState}
@@ -1452,11 +1509,11 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
             onPatch={() => {}}
             onMultiPatch={(patch) => {
               for (const id of selectedIds) {
-                onNodeUpdate?.(id, patch, currentCanvasRef)
+                wrappedOnNodeUpdate(id, patch, currentCanvasRef)
               }
             }}
             onDelete={() => {
-              onNodesDelete?.(Array.from(selectedIds), currentCanvasRef)
+              wrappedOnNodesDelete(Array.from(selectedIds), currentCanvasRef)
               clearSelection()
             }}
             getViewport={getViewportState}

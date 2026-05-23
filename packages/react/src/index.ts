@@ -45,6 +45,8 @@ export type { PendingEdgeState } from './hooks/useEdgeCreate.js'
 export { useMultiSelect } from './hooks/useMultiSelect.js'
 export type { MarqueeRect } from './hooks/useMultiSelect.js'
 export { useMultiSelectClipboard } from './hooks/useMultiSelectClipboard.js'
+export { useCommandHistory } from './hooks/useCommandHistory.js'
+export type { CanvasCommand } from './hooks/useCommandHistory.js'
 
 // Re-export everything from core for convenience
 export * from 'system-canvas'
