@@ -23,6 +23,7 @@ interface UseMultiSelectResult {
   toggleNode: (id: string) => void
   selectAll: () => void
   clearSelection: () => void
+  selectMultiple: (ids: string[]) => void
   marqueeRect: MarqueeRect | null
   marqueeActiveRef: React.RefObject<boolean>
 }
@@ -70,6 +71,10 @@ export function useMultiSelect(options: UseMultiSelectOptions): UseMultiSelectRe
 
   const clearSelection = useCallback(() => {
     setSelectedIds(new Set())
+  }, [])
+
+  const selectMultiple = useCallback((ids: string[]) => {
+    setSelectedIds(new Set(ids))
   }, [])
 
   // -------------------------------------------------------------------------
@@ -283,6 +288,7 @@ export function useMultiSelect(options: UseMultiSelectOptions): UseMultiSelectRe
     toggleNode,
     selectAll,
     clearSelection,
+    selectMultiple,
     marqueeRect,
     marqueeActiveRef,
   }

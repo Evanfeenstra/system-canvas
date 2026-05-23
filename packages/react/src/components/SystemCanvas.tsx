@@ -36,6 +36,7 @@ import {
   snapToLane,
 } from 'system-canvas'
 import { useNavigation } from '../hooks/useNavigation.js'
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts.js'
 import { useCanvasInteraction } from '../hooks/useCanvasInteraction.js'
 import { useNodeDrag } from '../hooks/useNodeDrag.js'
 import { useNodeResize } from '../hooks/useNodeResize.js'
@@ -662,6 +663,7 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
     toggleNode,
     selectAll,
     clearSelection,
+    selectMultiple,
     marqueeRect,
     marqueeActiveRef,
   } = useMultiSelect({
@@ -948,6 +950,7 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
     dragOverrides,
     dropTargetId,
     onPointerDown: onNodePointerDown,
+    cancelDrag,
   } = useNodeDrag({
     viewport: viewportStateRef,
     nodesRef,
@@ -1303,67 +1306,41 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
     [wrappedOnNodeAdd, currentCanvasRef, theme]
   )
 
-  // Keyboard: Delete/Backspace removes selected node/edge; Escape clears selection/editing;
-  // Cmd+A selects all nodes.
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLDivElement>) => {
-      if (!editable) return
-      if (e.key === 'Escape') {
-        setEditingId(null)
-        clearSelection()
-        setEditingEdgeId(null)
-        setSelectedEdgeId(null)
-        return
-      }
-      if (editingId || editingEdgeId) return // let the editor own the keys
-      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key === 'z') {
-        e.preventDefault()
-        undo()
-        return
-      }
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'z') {
-        e.preventDefault()
-        redo()
-        return
-      }
-      if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
-        e.preventDefault()
-        selectAll()
-        return
-      }
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (selectedIds.size > 1) {
-          e.preventDefault()
-          wrappedOnNodesDelete(Array.from(selectedIds), currentCanvasRef)
-          clearSelection()
-        } else if (selectedIds.size === 1) {
-          const id = Array.from(selectedIds)[0]
-          e.preventDefault()
-          wrappedOnNodeDelete(id, currentCanvasRef)
-          clearSelection()
-        } else if (selectedEdgeId) {
-          e.preventDefault()
-          wrappedOnEdgeDelete(selectedEdgeId, currentCanvasRef)
-          setSelectedEdgeId(null)
-        }
-      }
-    },
-    [
-      editable,
-      editingId,
-      editingEdgeId,
-      selectedIds,
-      selectedEdgeId,
-      wrappedOnNodeDelete,
-      wrappedOnNodesDelete,
-      wrappedOnEdgeDelete,
-      currentCanvasRef,
-      clearSelection,
-      selectAll,
-      undo,
-      redo,
-    ]
-  )
+  // Keyboard shortcuts — delegated to the dedicated hook for maintainability.
+  const handleKeyDown = useKeyboardShortcuts({
+    editable,
+    editingId,
+    editingEdgeId,
+    selectedIds,
+    selectedEdgeId,
+    nodesRef,
+    edgesRef,
+    theme,
+    currentCanvasRef,
+    contextMenuState,
+    setContextMenuState,
+    wrappedOnNodeAdd,
+    wrappedOnEdgeAdd,
+    wrappedOnNodeUpdate,
+    wrappedOnNodesUpdate,
+    wrappedOnNodeDelete,
+    wrappedOnNodesDelete,
+    wrappedOnEdgeDelete,
+    onNodesUpdate,
+    onNodeUpdate,
+    beginBatch,
+    endBatch,
+    undo,
+    redo,
+    selectNode,
+    selectMultiple,
+    selectAll,
+    clearSelection,
+    setEditingId,
+    setEditingEdgeId,
+    setSelectedEdgeId,
+    cancelDrag,
+  })
 
   const renderProps: AddNodeButtonRenderProps = { options: menuOptions, addNode, theme }
 
