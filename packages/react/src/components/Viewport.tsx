@@ -28,8 +28,11 @@ import { EdgeLabelEditor } from './EdgeLabelEditor.js'
 import { ConnectionHandles } from './ConnectionHandles.js'
 import { PendingEdgeRenderer } from './PendingEdgeRenderer.js'
 import { LanesBackground } from './LanesBackground.js'
+import { AlignmentGuidesLayer } from './AlignmentGuidesLayer.js'
+import { RevealsLayer } from './RevealsLayer.js'
 import type { ResizeCorner, ResizeOverride } from '../hooks/useNodeResize.js'
 import type { PendingEdgeState } from '../hooks/useEdgeCreate.js'
+import type { AlignmentGuide } from 'system-canvas'
 
 /**
  * Extra padding around each node's bounding box when hit-testing for hover.
@@ -102,7 +105,7 @@ interface ViewportProps {
 
   // Editable
   onNodePointerDown?: (node: ResolvedNode, event: React.PointerEvent) => void
-  selectedId?: string | null
+  selectedIds?: Set<string> | null
   editingId?: string | null
   selectedEdgeId?: string | null
   editingEdgeId?: string | null
@@ -114,6 +117,16 @@ interface ViewportProps {
    * progress, no hover, or the predicate rejected the current hover.
    */
   dropTargetId?: string | null
+  /**
+   * Multi-select marquee rectangle in screen-space (SVG-relative coordinates).
+   * Rendered as a semi-transparent overlay outside the transform group.
+   */
+  marqueeRect?: { x1: number; y1: number; x2: number; y2: number } | null
+  /**
+   * Ref that is `true` while the user holds Space to draw a marquee.
+   * Threaded into `useViewport` to suppress d3-zoom panning during marquee.
+   */
+  marqueeActiveRef?: React.RefObject<boolean>
   resizeOverrides?: Map<string, ResizeOverride>
   onResizeHandlePointerDown?: (
     node: ResolvedNode,
@@ -134,6 +147,12 @@ interface ViewportProps {
   ) => void
   /** When true, enable handle-on-hover and pending-edge preview layer */
   edgeCreateEnabled?: boolean
+  /** Live alignment guides to render during drag. Rendered in canvas-space above all content. */
+  alignmentGuides?: AlignmentGuide[]
+  /** Node ids that should render at low opacity (search/category filter). */
+  dimmedNodeIds?: Set<string>
+  /** Node ids that should render with a highlight ring (search match). */
+  highlightedNodeIds?: Set<string>
 }
 
 export interface ViewportHandle {
@@ -184,12 +203,14 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
       onNodeContextMenu,
       onEdgeContextMenu,
       onNodePointerDown,
-      selectedId,
+      selectedIds,
       editingId,
       selectedEdgeId,
       editingEdgeId,
       dragOverrides,
       dropTargetId,
+      marqueeRect,
+      marqueeActiveRef,
       resizeOverrides,
       onResizeHandlePointerDown,
       onEditorCommit,
@@ -199,6 +220,9 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
       pendingEdge,
       onConnectionHandlePointerDown,
       edgeCreateEnabled,
+      alignmentGuides,
+      dimmedNodeIds,
+      highlightedNodeIds,
       autoFit = 'canvas-change',
       canvasRef,
       handoffTransform,
@@ -213,6 +237,7 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
         maxZoom,
         defaultViewport,
         onViewportChange,
+        marqueeActiveRef,
       })
 
     // Track whether a zoom-to-node navigation just happened.
@@ -484,6 +509,17 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
     const dropTargetNode =
       dropTargetId ? renderNodeMap.get(dropTargetId) ?? null : null
 
+    // Stable getter for the current viewport — passed to children that
+    // need to poll viewport on every animation frame (RevealsLayer's
+    // zoom-gated opacity ticker). Mirrors the same pattern used by
+    // NodeToolbar / LaneHeaders, but kept local to Viewport so the
+    // RevealsLayer can sit inside the transformable <g> without needing
+    // the top-level `getViewportState` callback in SystemCanvas.
+    const getViewport = useCallback(
+      (): ViewportState => viewport.current ?? { x: 0, y: 0, zoom: 1 },
+      [viewport]
+    )
+
     // Compute edge editor anchor (midpoint of the edge being edited)
     const editingEdge = editingEdgeId
       ? edges.find((e) => e.id === editingEdgeId) ?? null
@@ -556,10 +592,12 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
             onContextMenu={onNodeContextMenu}
             onNavigate={onNodeNavigate}
             onPointerDown={onNodePointerDown}
-            selectedId={selectedId}
+            selectedIds={selectedIds}
             editingId={editingId}
             canvases={canvases}
             only="groups"
+            dimmedNodeIds={dimmedNodeIds}
+            highlightedNodeIds={highlightedNodeIds}
           />
 
           {/* Edges above groups but below regular nodes — so edges appear
@@ -575,6 +613,7 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
             onContextMenu={onEdgeContextMenu}
             selectedId={selectedEdgeId}
             editingId={editingEdgeId}
+            dimmedNodeIds={dimmedNodeIds}
           />
 
           {/* Non-group nodes on top (+ resize handles) */}
@@ -586,11 +625,26 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
             onContextMenu={onNodeContextMenu}
             onNavigate={onNodeNavigate}
             onPointerDown={onNodePointerDown}
-            selectedId={selectedId}
+            selectedIds={selectedIds}
             editingId={editingId}
             onResizeHandlePointerDown={onResizeHandlePointerDown}
             canvases={canvases}
             only="non-groups"
+            dimmedNodeIds={dimmedNodeIds}
+            highlightedNodeIds={highlightedNodeIds}
+          />
+
+          {/* Category reveals — zoom-gated detail panels attached to
+              individual nodes. Sits above nodes/edges but below selection
+              halos, editors, and resize handles so interactive UI always
+              wins for hit-testing. The layer itself sets pointerEvents
+              "none" globally; consumers needing clickable reveals can
+              opt back in inside a `kind: 'custom'` renderer. */}
+          <RevealsLayer
+            nodes={renderNodes}
+            theme={theme}
+            canvases={canvases}
+            getViewport={getViewport}
           />
 
           {/* Target highlight (halo) for the currently-hovered drop target
@@ -634,6 +688,31 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
             />
           )}
 
+          {/* Selection halos for multi-select (and single-select).
+              One halo rect per selected node id, rendered above all other
+              node/edge content so the ring is always visible. Mirrors the
+              dropTargetNode halo pattern. */}
+          {selectedIds && selectedIds.size > 0 &&
+            Array.from(selectedIds).map((id) => {
+              const node = renderNodeMap.get(id)
+              if (!node) return null
+              return (
+                <rect
+                  key={`halo-${id}`}
+                  x={node.x - 3}
+                  y={node.y - 3}
+                  width={node.width + 6}
+                  height={node.height + 6}
+                  rx={(node.resolvedCornerRadius ?? 0) + 3}
+                  fill="none"
+                  stroke={theme.node.labelColor}
+                  strokeWidth={1.5}
+                  opacity={0.7}
+                  pointerEvents="none"
+                />
+              )
+            })}
+
           {/* Ghost edge preview during edge-creation drag */}
           {pendingEdge && pendingSourceNode && (
             <PendingEdgeRenderer
@@ -655,6 +734,11 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
               immediate={!!pendingEdge}
               activeSide={hoveredSide}
             />
+          )}
+
+          {/* Alignment guides — rendered above all nodes/edges, disappear on drag end */}
+          {alignmentGuides && alignmentGuides.length > 0 && (
+            <AlignmentGuidesLayer guides={alignmentGuides} />
           )}
 
           {/* Inline editor on top of the edited node */}
@@ -681,6 +765,22 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(
               />
             )}
         </g>
+
+        {/* Marquee selection rectangle — screen-space overlay outside the
+            transform group so it doesn't pan/zoom with the canvas content. */}
+        {marqueeRect && (
+          <rect
+            x={Math.min(marqueeRect.x1, marqueeRect.x2)}
+            y={Math.min(marqueeRect.y1, marqueeRect.y2)}
+            width={Math.abs(marqueeRect.x2 - marqueeRect.x1)}
+            height={Math.abs(marqueeRect.y2 - marqueeRect.y1)}
+            fill={theme.node.labelColor + '18'}
+            stroke={theme.node.labelColor}
+            strokeWidth={1}
+            opacity={0.9}
+            pointerEvents="none"
+          />
+        )}
       </svg>
     )
   }

@@ -59,6 +59,19 @@ export type {
   RollupResult,
   EditableField,
   EditableFieldKind,
+  // Category reveals — zoom-gated detail panels
+  RevealPlacement,
+  CategoryReveals,
+  RevealSpec,
+  BaseReveal,
+  TextReveal,
+  ListReveal,
+  RevealListRow,
+  MetricsReveal,
+  RevealMetricBlock,
+  CustomReveal,
+  RevealContext,
+  RevealsTheme,
 } from './types.js'
 
 // Themes
@@ -123,6 +136,17 @@ export {
 } from './slots.js'
 export type { ReflowReservations } from './slots.js'
 
+// Category-reveal helpers (zoom-gated detail panels attached to a node)
+export {
+  getCategoryReveals,
+  resolveRevealThresholds,
+  computeRevealOpacity,
+  computeRevealRegion,
+  resolveRevealAccessor,
+  revealEntries,
+  REVEAL_PLACEMENTS,
+} from './reveals.js'
+
 // Path utilities (for form editor field paths like 'customData.status')
 export { getAtPath, setAtPath } from './paths.js'
 
@@ -154,6 +178,11 @@ export {
   updateEdge,
   removeEdge,
 } from './canvas.js'
+
+export { snapToGrid } from './grid.js'
+export { matchesSearch, computeNodeFilter } from './search.js'
+export type { AlignmentGuide } from './alignment.js'
+export { computeAlignmentGuides, alignNodes, distributeNodes } from './alignment.js'
 
 // Convenience theme collection
 import { darkTheme as _dark } from './themes/dark.js'

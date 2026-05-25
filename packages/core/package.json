@@ -1,8 +1,13 @@
 {
   "name": "system-canvas",
-  "version": "0.1.19",
+  "version": "0.2.7",
   "description": "Interactive, zoomable SVG diagrams from JSON Canvas documents. Pure TypeScript core with types, themes, edge routing, and viewport math.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stakwork/system-canvas.git",
+    "directory": "packages/core"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -27,7 +32,8 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "dev": "tsc --watch"
+    "dev": "tsc --watch",
+    "prepublishOnly": "npm run build"
   },
   "devDependencies": {
     "typescript": "^5.4.0"

@@ -5,7 +5,7 @@ import type {
   ViewportState,
   NodeUpdate,
 } from 'system-canvas'
-import { getGroupChildren, screenToCanvas } from 'system-canvas'
+import { getGroupChildren, screenToCanvas, snapToGrid } from 'system-canvas'
 
 /** A single moved node's id and the patch (x/y) to apply to it. */
 export interface NodeDragUpdate {
@@ -65,6 +65,20 @@ interface UseNodeDragOptions {
    * job is purely to mutate data and trigger a refetch.
    */
   onNodeDrop?: (sources: CanvasNode[], target: CanvasNode) => void
+
+  /**
+   * Ref to the current multi-selection set. When present and the grabbed
+   * node is part of a selection containing 2+ nodes, the drag moves ALL
+   * selected nodes together (preserving relative positions) rather than
+   * only the grabbed node + its group children.
+   */
+  selectedIdsRef?: React.RefObject<Set<string>>
+
+  /**
+   * When > 0, node positions are snapped to the nearest multiple of this
+   * value (in canvas units) live during drag. Defaults to 0 (off).
+   */
+  snapGridSize?: number
 }
 
 interface UseNodeDragResult {
@@ -80,6 +94,8 @@ interface UseNodeDragResult {
   /** Attach this as the node component's onPointerDown */
   onPointerDown: (node: ResolvedNode, event: React.PointerEvent) => void
   isDragging: boolean
+  /** Cancel any in-progress drag without committing the position change. No-op when no drag is active. */
+  cancelDrag: () => void
 }
 
 interface DragState {
@@ -103,7 +119,7 @@ interface DragState {
 const DRAG_THRESHOLD = 3 // px in screen space before we consider it a drag
 
 export function useNodeDrag(options: UseNodeDragOptions): UseNodeDragResult {
-  const { viewport, nodesRef, onCommit, svgRef, canDropNodeOn, onNodeDrop } =
+  const { viewport, nodesRef, onCommit, svgRef, canDropNodeOn, onNodeDrop, selectedIdsRef, snapGridSize = 0 } =
     options
 
   const [dragOverrides, setDragOverrides] = useState<
@@ -124,6 +140,12 @@ export function useNodeDrag(options: UseNodeDragOptions): UseNodeDragResult {
   onNodeDropRef.current = onNodeDrop
   const svgRefRef = useRef(svgRef)
   svgRefRef.current = svgRef
+  // Mirror selectedIdsRef so the pointer-down handler always reads the
+  // latest selection without re-binding on every selection change.
+  // We simply alias the consumer-provided ref; if none was provided we
+  // use a stable empty-set ref as a no-op fallback.
+  const emptySetRef = useRef<Set<string>>(new Set())
+  const effectiveSelectedIdsRef = selectedIdsRef ?? emptySetRef
 
   // Latest computed drop-target id so finishDrag can read it without
   // depending on React state (state updates are async; finishDrag fires
@@ -196,7 +218,9 @@ export function useNodeDrag(options: UseNodeDragOptions): UseNodeDragResult {
 
     const next = new Map<string, { x: number; y: number }>()
     for (const [id, start] of st.moving) {
-      next.set(id, { x: start.startX + dx, y: start.startY + dy })
+      const sx = snapGridSize > 0 ? snapToGrid(start.startX + dx, snapGridSize) : start.startX + dx
+      const sy = snapGridSize > 0 ? snapToGrid(start.startY + dy, snapGridSize) : start.startY + dy
+      next.set(id, { x: sx, y: sy })
     }
     setDragOverrides(next)
 
@@ -307,14 +331,30 @@ export function useNodeDrag(options: UseNodeDragOptions): UseNodeDragResult {
       event.stopPropagation()
 
       const moving = new Map<string, { startX: number; startY: number }>()
-      moving.set(node.id, { startX: node.x, startY: node.y })
 
-      // If it's a group, also move spatially contained children.
-      if (node.type === 'group' && nodesRef.current) {
-        const children = getGroupChildren(node, nodesRef.current)
-        for (const c of children) {
-          if (!moving.has(c.id)) {
-            moving.set(c.id, { startX: c.x, startY: c.y })
+      // When the grabbed node is part of a multi-selection (2+ nodes),
+      // move all selected nodes together instead of the single node + its
+      // group children. The source stays as the grabbed node so
+      // canDropNodeOn compatibility is preserved.
+      const sel = effectiveSelectedIdsRef.current
+      if (sel && sel.size > 1 && sel.has(node.id) && nodesRef.current) {
+        for (const id of sel) {
+          const n = nodesRef.current.find(r => r.id === id)
+          if (n) {
+            moving.set(id, { startX: n.x, startY: n.y })
+          }
+        }
+      } else {
+        // Normal single-node path
+        moving.set(node.id, { startX: node.x, startY: node.y })
+
+        // If it's a group, also move spatially contained children.
+        if (node.type === 'group' && nodesRef.current) {
+          const children = getGroupChildren(node, nodesRef.current)
+          for (const c of children) {
+            if (!moving.has(c.id)) {
+              moving.set(c.id, { startX: c.x, startY: c.y })
+            }
           }
         }
       }
@@ -343,5 +383,9 @@ export function useNodeDrag(options: UseNodeDragOptions): UseNodeDragResult {
     [nodesRef, onPointerMove, onPointerUp, onPointerCancel]
   )
 
-  return { dragOverrides, dropTargetId, onPointerDown, isDragging }
+  const cancelDrag = useCallback(() => {
+    if (stateRef.current) finishDrag(false)
+  }, [finishDrag])
+
+  return { dragOverrides, dropTargetId, onPointerDown, isDragging, cancelDrag }
 }

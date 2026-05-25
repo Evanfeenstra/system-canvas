@@ -285,6 +285,20 @@ function App() {
     [setActiveCanvases]
   )
 
+  const handleNodesDelete = useCallback(
+    (nodeIds: string[], canvasRef: string | undefined) => {
+      const key = keyFor(canvasRef)
+      setActiveCanvases((prev) => {
+        let canvas = prev[key] ?? { nodes: [], edges: [] }
+        for (const id of nodeIds) {
+          canvas = removeNodeHelper(canvas, id)
+        }
+        return { ...prev, [key]: canvas }
+      })
+    },
+    [setActiveCanvases]
+  )
+
   const handleEdgeUpdate = useCallback(
     (edgeId: string, patch: EdgeUpdate, canvasRef: string | undefined) => {
       const key = keyFor(canvasRef)
@@ -575,6 +589,7 @@ function App() {
         onNodeAdd={handleNodeAdd}
         onNodeUpdate={handleNodeUpdate}
         onNodeDelete={handleNodeDelete}
+        onNodesDelete={handleNodesDelete}
         onEdgeAdd={handleEdgeAdd}
         onEdgeUpdate={handleEdgeUpdate}
         onEdgeDelete={handleEdgeDelete}

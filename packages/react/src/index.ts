@@ -27,6 +27,7 @@ export type { NodeToolbarRenderProps } from './components/NodeToolbar.js'
 export { LanesBackground } from './components/LanesBackground.js'
 export { LaneHeaders } from './components/LaneHeaders.js'
 export { ResizeHandles } from './components/ResizeHandles.js'
+export { RevealsLayer } from './components/RevealsLayer.js'
 
 // Primitives — low-level building blocks used internally by the slot
 // renderer and re-exported for `kind: 'custom'` slot implementations.
@@ -42,6 +43,14 @@ export { useNodeResize } from './hooks/useNodeResize.js'
 export type { ResizeCorner, ResizeOverride } from './hooks/useNodeResize.js'
 export { useEdgeCreate } from './hooks/useEdgeCreate.js'
 export type { PendingEdgeState } from './hooks/useEdgeCreate.js'
+export { useMultiSelect } from './hooks/useMultiSelect.js'
+export type { MarqueeRect } from './hooks/useMultiSelect.js'
+export { useMultiSelectClipboard } from './hooks/useMultiSelectClipboard.js'
+export { useCommandHistory } from './hooks/useCommandHistory.js'
+export type { CanvasCommand } from './hooks/useCommandHistory.js'
+export { useAlignmentGuides } from './hooks/useAlignmentGuides.js'
+export { AlignmentGuidesLayer } from './components/AlignmentGuidesLayer.js'
+export type { AlignDirection } from './components/NodeToolbar.js'
 
 // Re-export everything from core for convenience
 export * from 'system-canvas'

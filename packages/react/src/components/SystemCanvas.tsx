@@ -34,12 +34,20 @@ import {
   filterContextMenuItems,
   screenToCanvas,
   snapToLane,
+  alignNodes,
+  distributeNodes,
+  computeNodeFilter,
 } from 'system-canvas'
+import type { AlignmentGuide } from 'system-canvas'
 import { useNavigation } from '../hooks/useNavigation.js'
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts.js'
 import { useCanvasInteraction } from '../hooks/useCanvasInteraction.js'
 import { useNodeDrag } from '../hooks/useNodeDrag.js'
 import { useNodeResize } from '../hooks/useNodeResize.js'
 import { useEdgeCreate } from '../hooks/useEdgeCreate.js'
+import { useMultiSelect } from '../hooks/useMultiSelect.js'
+import { useMultiSelectClipboard } from '../hooks/useMultiSelectClipboard.js'
+import { useCommandHistory } from '../hooks/useCommandHistory.js'
 import {
   useZoomNavigation,
   type ParentFrame,
@@ -49,11 +57,13 @@ import { Viewport, type ViewportHandle } from './Viewport.js'
 import { Breadcrumbs } from './Breadcrumbs.js'
 import { AddNodeButton, type AddNodeButtonRenderProps } from './AddNodeButton.js'
 import { LaneHeaders } from './LaneHeaders.js'
-import { NodeToolbar, type NodeToolbarRenderProps } from './NodeToolbar.js'
+import { NodeToolbar, type NodeToolbarRenderProps, type AlignDirection } from './NodeToolbar.js'
+import { useAlignmentGuides } from '../hooks/useAlignmentGuides.js'
 import {
   NodeContextMenuOverlay,
   type NodeContextMenuOverlayState,
 } from './NodeContextMenuOverlay.js'
+import { SearchOverlay } from './SearchOverlay.js'
 
 export interface SystemCanvasProps {
   /** Canvas data to render */
@@ -180,6 +190,12 @@ export interface SystemCanvasProps {
     canvasRef: string | undefined
   ) => void
   onNodeDelete?: (nodeId: string, canvasRef: string | undefined) => void
+  /**
+   * Bulk delete callback — fired when the user presses Delete/Backspace with
+   * 2+ nodes selected. Receives all selected node IDs at once so consumers
+   * can batch-remove them in a single transaction.
+   */
+  onNodesDelete?: (nodeIds: string[], canvasRef: string | undefined) => void
   onEdgeUpdate?: (
     edgeId: string,
     patch: EdgeUpdate,
@@ -325,6 +341,28 @@ export interface SystemCanvasProps {
    */
   zoomNavigation?: boolean | ZoomNavigationConfig
 
+  // --- Snap & alignment ---
+  /**
+   * Enable snap-to-grid during drag and resize.
+   * `true` = inherit `theme.grid.size`; `number` = explicit grid size in canvas px; falsy = off.
+   */
+  snapGrid?: boolean | number
+  /** Alignment guide detection radius in canvas units. Default 4. */
+  guideThreshold?: number
+  /**
+   * When true and 2+ nodes are selected, inject built-in align/distribute items into the
+   * right-click context menu for the selected group.
+   */
+  alignDistributeMenu?: boolean
+
+  // --- History ---
+  /** Maximum undo/redo history depth. Defaults to 50. Only active when editable=true. */
+  historyDepth?: number
+  /** Called after an undo step. Receives the canvasRef that was affected. */
+  onUndo?: (canvasRef: string | undefined) => void
+  /** Called after a redo step. Receives the canvasRef that was affected. */
+  onRedo?: (canvasRef: string | undefined) => void
+
   // --- Styling ---
   className?: string
   style?: React.CSSProperties
@@ -381,6 +419,7 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
       onNodeUpdate,
       onNodesUpdate,
       onNodeDelete,
+      onNodesDelete,
       onEdgeUpdate,
       onEdgeDelete,
       onEdgeAdd,
@@ -400,6 +439,12 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
       laneHeaders = 'pinned',
       snapToLanes = false,
       zoomNavigation = false,
+      snapGrid,
+      guideThreshold,
+      alignDistributeMenu,
+      historyDepth,
+      onUndo,
+      onRedo,
       className,
       style,
     },
@@ -539,6 +584,14 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
     )
   }, [themeProp, customThemes, currentCanvas.theme?.base, canvas.theme?.base])
 
+  // Snap-to-grid size (canvas units). 0 = off.
+  const snapGridSize =
+    snapGrid === true
+      ? theme.grid.size
+      : typeof snapGrid === 'number'
+        ? snapGrid
+        : 0
+
   // Resolve canvas data (apply theme, categories, defaults)
   const { nodes, edges, nodeMap } = useMemo(() => {
     const resolved = resolveCanvas(currentCanvas, theme)
@@ -621,18 +674,129 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
   )
 
   // Selection + editing state (editable mode)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
   const [editingEdgeId, setEditingEdgeId] = useState<string | null>(null)
 
-  // Clear selection/editing when navigating between canvases
+  // Search + category filter state
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [hiddenCategories, setHiddenCategories] = useState<Set<string>>(new Set())
+
+  // Proxy ref for the SVG element — declared early so both useMultiSelect,
+  // useNodeDrag, and useEdgeCreate can all share it. The `.current` assignment
+  // runs every render further below; hooks read it lazily at gesture time.
+  const svgProxyRef = useRef<SVGSVGElement | null>(null)
+
+  // Container div ref — needed by useMultiSelect for keyboard event listeners
+  // and by lane-header/size tracking below.
+  const containerRef = useRef<HTMLDivElement | null>(null)
+
+  // Multi-select hook — owns selectedIds, marquee drawing, Cmd+A
+  const {
+    selectedIds,
+    selectNode,
+    toggleNode,
+    selectAll,
+    clearSelection,
+    selectMultiple,
+    marqueeRect,
+    marqueeActiveRef,
+  } = useMultiSelect({
+    svgRef: svgProxyRef,
+    viewport: viewportStateRef,
+    nodesRef,
+    containerRef,
+    enabled: editable,
+  })
+
+  // Mirror selectedIds into a ref so clipboard and drag hooks read latest
+  const selectedIdsRef = useRef<Set<string>>(selectedIds)
   useEffect(() => {
-    setSelectedId(null)
+    selectedIdsRef.current = selectedIds
+  }, [selectedIds])
+
+  // Mirror edges into a ref for the clipboard hook
+  const edgesRef = useRef<typeof edges>(edges)
+  useEffect(() => {
+    edgesRef.current = edges
+  }, [edges])
+
+  // Command history — undo/redo stack for all mutations
+  const {
+    wrappedOnNodeAdd,
+    wrappedOnNodeUpdate,
+    wrappedOnNodesUpdate,
+    wrappedOnNodeDelete,
+    wrappedOnNodesDelete,
+    wrappedOnEdgeAdd,
+    wrappedOnEdgeUpdate,
+    wrappedOnEdgeDelete,
+    beginBatch,
+    endBatch,
+    undo,
+    redo,
+  } = useCommandHistory({
+    nodesRef: nodesRef as React.RefObject<CanvasNode[]>,
+    edgesRef,
+    onNodeAdd,
+    onNodeUpdate,
+    onNodesUpdate,
+    onNodeDelete,
+    onNodesDelete,
+    onEdgeAdd,
+    onEdgeUpdate,
+    onEdgeDelete,
+    maxDepth: historyDepth ?? 50,
+    enabled: editable,
+    onUndo,
+    onRedo,
+  })
+
+  // Clipboard: Cmd+C / Cmd+V
+  useMultiSelectClipboard({
+    selectedIdsRef,
+    nodesRef: nodesRef as React.RefObject<CanvasNode[]>,
+    edgesRef,
+    viewport: viewportStateRef,
+    canvasContainerRef: containerRef,
+    onNodeAdd: (node) => wrappedOnNodeAdd(node, currentCanvasRef),
+    onEdgeAdd: (edge) => wrappedOnEdgeAdd(edge, currentCanvasRef),
+    canvasRef: currentCanvasRef,
+    getCursorScreenPos: () => viewportHandleRef.current?.getCursorScreenPos() ?? null,
+    onBeginBatch: beginBatch,
+    onEndBatch: endBatch,
+  })
+
+  // Clear selection/editing when navigating between canvases; also reset search
+  useEffect(() => {
+    clearSelection()
     setEditingId(null)
     setSelectedEdgeId(null)
     setEditingEdgeId(null)
+    setSearchOpen(false)
+    setSearchQuery('')
+    setHiddenCategories(new Set())
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentCanvasRef])
+
+  // Cmd+F / Ctrl+F global listener — opens search in both editable and read-only modes
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+        e.preventDefault()
+        setSearchOpen((prev) => {
+          if (prev) {
+            setSearchQuery('')
+            setHiddenCategories(new Set())
+          }
+          return !prev
+        })
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   // Unified selection-change emission. Watches both id slots and emits
   // a single `CanvasSelection | null` to the consumer whenever the
@@ -666,43 +830,65 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
   }, [onSelectionChange])
 
   const lastEmittedSelectionRef = useRef<{
-    kind: 'node' | 'edge' | null
+    kind: 'node' | 'edge' | 'multi' | null
     id: string | null
+    // For 'multi': sorted comma-joined id list for dedup
+    multiIds: string | null
     canvasRef: string | undefined
-  }>({ kind: null, id: null, canvasRef: undefined })
+  }>({ kind: null, id: null, multiIds: null, canvasRef: undefined })
 
   useEffect(() => {
     const cb = onSelectionChangeRef.current
     let next: CanvasSelection = null
-    if (selectedId) {
-      const node = nodeMap.get(selectedId)
+
+    if (selectedIds.size > 1) {
+      const resolvedNodes: ResolvedNode[] = []
+      for (const id of selectedIds) {
+        const n = nodeMap.get(id)
+        if (n) resolvedNodes.push(n)
+      }
+      if (resolvedNodes.length > 0) {
+        next = { kind: 'multi', nodes: resolvedNodes, canvasRef: currentCanvasRef }
+      }
+    } else if (selectedIds.size === 1) {
+      const id = Array.from(selectedIds)[0]
+      const node = nodeMap.get(id)
       if (node) next = { kind: 'node', node, canvasRef: currentCanvasRef }
     }
+
     if (!next && selectedEdgeId) {
       const edge = edges.find((e) => e.id === selectedEdgeId)
       if (edge) next = { kind: 'edge', edge, canvasRef: currentCanvasRef }
     }
+
     const last = lastEmittedSelectionRef.current
     const nextKind = next?.kind ?? null
-    const nextId = next ? (next.kind === 'node' ? next.node.id : next.edge.id) : null
     const nextRef = next?.canvasRef
-    if (
-      last.kind === nextKind &&
-      last.id === nextId &&
-      last.canvasRef === nextRef
-    ) {
-      return
+
+    if (nextKind === 'multi' && next?.kind === 'multi') {
+      const sortedIds = next.nodes.map((n) => n.id).sort().join(',')
+      if (last.kind === 'multi' && last.multiIds === sortedIds && last.canvasRef === nextRef) {
+        return
+      }
+      lastEmittedSelectionRef.current = { kind: 'multi', id: null, multiIds: sortedIds, canvasRef: nextRef }
+    } else {
+      const nextId = next
+        ? next.kind === 'node'
+          ? next.node.id
+          : next.kind === 'edge'
+            ? next.edge.id
+            : null
+        : null
+      if (last.kind === nextKind && last.id === nextId && last.canvasRef === nextRef) {
+        return
+      }
+      lastEmittedSelectionRef.current = { kind: nextKind, id: nextId, multiIds: null, canvasRef: nextRef }
     }
-    lastEmittedSelectionRef.current = {
-      kind: nextKind,
-      id: nextId,
-      canvasRef: nextRef,
-    }
+
     cb?.(next)
-  }, [selectedId, selectedEdgeId, currentCanvasRef, nodeMap, edges])
+  }, [selectedIds, selectedEdgeId, currentCanvasRef, nodeMap, edges])
 
   // Container size — tracked so the lane-header overlay can size itself.
-  const containerRef = useRef<HTMLDivElement | null>(null)
   const [containerSize, setContainerSize] = useState<{ width: number; height: number }>(
     { width: 0, height: 0 }
   )
@@ -728,6 +914,26 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
     () => viewportStateRef.current ?? { x: 0, y: 0, zoom: 1 },
     []
   )
+
+  // Derived search filter
+  const { matchingIds, dimmedIds } = useMemo(
+    () => computeNodeFilter(nodes, searchOpen ? searchQuery : '', hiddenCategories),
+    [nodes, searchQuery, searchOpen, hiddenCategories]
+  )
+
+  // Pan camera to the first matching node
+  const panToFirstMatch = useCallback(() => {
+    if (matchingIds.size === 0) return
+    const firstId = matchingIds.values().next().value as string
+    const node = nodesRef.current.find((n) => n.id === firstId)
+    const handle = viewportHandleRef.current
+    if (!node || !handle) return
+    const currentZoom = viewportStateRef.current.zoom
+    handle.zoomToNode(node, undefined, {
+      targetZoom: Math.max(currentZoom, 1.5),
+      durationMs: 400,
+    })
+  }, [matchingIds])
 
   // Per-node commit. Used by resize (which only ever moves a single
   // node) and as the fallback path in `commitDragBatch` when the
@@ -769,9 +975,9 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
 
   const commitResize = useCallback(
     (id: string, patch: NodeUpdate) => {
-      onNodeUpdate?.(id, applyLaneSnap(id, patch), currentCanvasRef)
+      wrappedOnNodeUpdate(id, applyLaneSnap(id, patch), currentCanvasRef)
     },
-    [onNodeUpdate, currentCanvasRef, applyLaneSnap]
+    [wrappedOnNodeUpdate, currentCanvasRef, applyLaneSnap]
   )
 
   // Batched drag commit. Fires once per drag-end with every moved
@@ -799,24 +1005,16 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
         patch: applyLaneSnap(u.id, u.patch),
       }))
       if (onNodesUpdate) {
-        onNodesUpdate(final, currentCanvasRef)
+        wrappedOnNodesUpdate(final, currentCanvasRef)
         return
       }
       if (!onNodeUpdate) return
       for (const { id, patch } of final) {
-        onNodeUpdate(id, patch, currentCanvasRef)
+        wrappedOnNodeUpdate(id, patch, currentCanvasRef)
       }
     },
-    [onNodeUpdate, onNodesUpdate, currentCanvasRef, applyLaneSnap]
+    [wrappedOnNodeUpdate, wrappedOnNodesUpdate, onNodeUpdate, onNodesUpdate, currentCanvasRef, applyLaneSnap]
   )
-
-  // Proxy ref pointing at the SVG element exposed by the viewport handle.
-  // Declared up here so `useNodeDrag` (drop-on-node hit-test) and
-  // `useEdgeCreate` (cursor-tracking) can both share it. The `.current`
-  // assignment runs every render below, after the viewport handle is
-  // populated; both hooks read `.current` lazily at gesture time, so
-  // declaration-vs-assignment ordering is fine.
-  const svgProxyRef = useRef<SVGSVGElement | null>(null)
 
   const handleNodeDrop = useCallback(
     (sources: CanvasNode[], target: CanvasNode) => {
@@ -829,6 +1027,8 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
     dragOverrides,
     dropTargetId,
     onPointerDown: onNodePointerDown,
+    cancelDrag,
+    isDragging,
   } = useNodeDrag({
     viewport: viewportStateRef,
     nodesRef,
@@ -836,30 +1036,44 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
     svgRef: svgProxyRef,
     canDropNodeOn,
     onNodeDrop: handleNodeDrop,
+    selectedIdsRef,
+    snapGridSize,
   })
 
   const { resizeOverrides, onHandlePointerDown: onResizeHandlePointerDown } =
     useNodeResize({
       viewport: viewportStateRef,
       onCommit: commitResize,
+      snapGridSize,
     })
 
+  // Alignment guides — live during drag, empty at rest.
+  const alignmentGuides: AlignmentGuide[] = useAlignmentGuides({
+    dragOverrides,
+    nodesRef,
+    isDragging,
+    threshold: guideThreshold ?? 4,
+  })
+
   // Selected node with live drag/resize overrides applied — used to position
-  // the floating node toolbar so it tracks the node as the user drags it.
+  // the floating single-node toolbar and resize handles.
+  // Only resolved when exactly one node is selected.
+  const singleSelectedId = selectedIds.size === 1 ? Array.from(selectedIds)[0] : null
   const selectedResolvedNode = useMemo<ResolvedNode | null>(() => {
-    if (!selectedId) return null
-    const base = nodeMap.get(selectedId)
+    if (!singleSelectedId) return null
+    const base = nodeMap.get(singleSelectedId)
     if (!base) return null
-    const resize = resizeOverrides.get(selectedId)
+    const resize = resizeOverrides.get(singleSelectedId)
     if (resize) {
       return { ...base, x: resize.x, y: resize.y, width: resize.width, height: resize.height }
     }
-    const drag = dragOverrides.get(selectedId)
+    const drag = dragOverrides.get(singleSelectedId)
     if (drag) {
       return { ...base, x: drag.x, y: drag.y }
     }
     return base
-  }, [selectedId, nodeMap, dragOverrides, resizeOverrides])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [singleSelectedId, nodeMap, dragOverrides, resizeOverrides])
 
   // Keep the proxy SVG ref pointed at the viewport's current SVG element.
   // Runs every render so useEdgeCreate / useNodeDrag both see the latest.
@@ -867,9 +1081,9 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
 
   const handleEdgeCreated = useCallback(
     (edge: CanvasEdge) => {
-      onEdgeAdd?.(edge, currentCanvasRef)
+      wrappedOnEdgeAdd(edge, currentCanvasRef)
     },
-    [onEdgeAdd, currentCanvasRef]
+    [wrappedOnEdgeAdd, currentCanvasRef]
   )
 
   const { pending: pendingEdge, onHandlePointerDown: onConnectionHandlePointerDown } =
@@ -1016,6 +1230,30 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
     setEditingEdgeId(edge.id)
   }, [])
 
+  // Align / distribute callbacks — used by the multi-select toolbar and
+  // (optionally) injected into the right-click context menu.
+  const handleAlign = useCallback(
+    (direction: AlignDirection) => {
+      const selectedNodes = Array.from(selectedIds)
+        .map((id) => nodesRef.current.find((n) => n.id === id))
+        .filter((n): n is ResolvedNode => n != null)
+      const updates = alignNodes(selectedNodes, direction)
+      if (updates.length > 0) wrappedOnNodesUpdate(updates, currentCanvasRef)
+    },
+    [selectedIds, nodesRef, wrappedOnNodesUpdate, currentCanvasRef]
+  )
+
+  const handleDistribute = useCallback(
+    (axis: 'horizontal' | 'vertical') => {
+      const selectedNodes = Array.from(selectedIds)
+        .map((id) => nodesRef.current.find((n) => n.id === id))
+        .filter((n): n is ResolvedNode => n != null)
+      const updates = distributeNodes(selectedNodes, axis)
+      if (updates.length > 0) wrappedOnNodesUpdate(updates, currentCanvasRef)
+    },
+    [selectedIds, nodesRef, wrappedOnNodesUpdate, currentCanvasRef]
+  )
+
   // Declarative node context menu state. `null` = closed; non-null is the
   // open menu's data (filtered items, target node, screen position, the
   // canvas ref the node lives on). Lives here rather than inside
@@ -1043,13 +1281,41 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
   const handleContextMenu = useCallback(
     (event: ContextMenuEvent) => {
       onContextMenu?.(event)
-      if (!nodeContextMenu) return
+      if (!nodeContextMenu && !alignDistributeMenu) return
       if (event.type !== 'node') return
       const node = event.target as CanvasNode | undefined
       if (!node) return
-      const matched = filterContextMenuItems(nodeContextMenu.items, node, {
-        canvasRef: currentCanvasRef ?? null,
-      })
+
+      const matchCtx = { canvasRef: currentCanvasRef ?? null }
+      const matched = nodeContextMenu
+        ? filterContextMenuItems(nodeContextMenu.items, node, matchCtx)
+        : []
+
+      // Inject built-in align/distribute items when the right-clicked node
+      // is part of the current multi-selection (2+ nodes).
+      if (alignDistributeMenu && selectedIds.size >= 2 && selectedIds.has(node.id)) {
+        const canDistribute = selectedIds.size >= 3
+        const builtins = [
+          { id: '__sys_align_left__',    label: 'Align Left' },
+          { id: '__sys_align_right__',   label: 'Align Right' },
+          { id: '__sys_align_top__',     label: 'Align Top' },
+          { id: '__sys_align_bottom__',  label: 'Align Bottom' },
+          { id: '__sys_align_centerH__', label: 'Align Center Horizontal' },
+          { id: '__sys_align_centerV__', label: 'Align Center Vertical' },
+          {
+            id: '__sys_distribute_h__',
+            label: 'Distribute Horizontally',
+            disabled: canDistribute ? undefined : () => !canDistribute,
+          },
+          {
+            id: '__sys_distribute_v__',
+            label: 'Distribute Vertically',
+            disabled: canDistribute ? undefined : () => !canDistribute,
+          },
+        ]
+        matched.push(...builtins)
+      }
+
       if (matched.length === 0) {
         // No items applied to this node — close any stale menu and let
         // the right-click be a no-op (the browser default is already
@@ -1064,8 +1330,28 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
         canvasRef: currentCanvasRef ?? null,
       })
     },
-    [onContextMenu, nodeContextMenu, currentCanvasRef]
+    [onContextMenu, nodeContextMenu, currentCanvasRef, alignDistributeMenu, selectedIds]
   )
+
+  // Effective context menu config — wraps the consumer's config (if any) and
+  // intercepts built-in align/distribute IDs before delegating to the consumer.
+  const effectiveNodeContextMenu = useMemo(() => {
+    if (!nodeContextMenu && !alignDistributeMenu) return null
+    const baseItems = nodeContextMenu?.items ?? []
+    const wrappedOnSelect: NodeContextMenuConfig['onSelect'] = (itemId, node, ctx) => {
+      // Intercept built-in IDs.
+      if (itemId === '__sys_align_left__')    { handleAlign('left');    return }
+      if (itemId === '__sys_align_right__')   { handleAlign('right');   return }
+      if (itemId === '__sys_align_top__')     { handleAlign('top');     return }
+      if (itemId === '__sys_align_bottom__')  { handleAlign('bottom');  return }
+      if (itemId === '__sys_align_centerH__') { handleAlign('centerH'); return }
+      if (itemId === '__sys_align_centerV__') { handleAlign('centerV'); return }
+      if (itemId === '__sys_distribute_h__')  { handleDistribute('horizontal'); return }
+      if (itemId === '__sys_distribute_v__')  { handleDistribute('vertical');   return }
+      nodeContextMenu?.onSelect(itemId, node, ctx)
+    }
+    return { items: baseItems, onSelect: wrappedOnSelect }
+  }, [nodeContextMenu, alignDistributeMenu, handleAlign, handleDistribute])
 
   // Interaction handlers
   const {
@@ -1087,7 +1373,8 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
     onNavigableNodeClick: handleNavigableNodeClick,
     viewport: viewportStateRef,
     editable,
-    onSelect: setSelectedId,
+    onSelect: (id: string | null) => { if (id) selectNode(id); else clearSelection() },
+    onToggleSelect: toggleNode,
     onBeginEdit: handleBeginEdit,
     onSelectEdge: setSelectedEdgeId,
     onBeginEditEdge: handleBeginEditEdge,
@@ -1097,11 +1384,11 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
   const handleEditorCommit = useCallback(
     (patch: NodeUpdate) => {
       if (editingId) {
-        onNodeUpdate?.(editingId, patch, currentCanvasRef)
+        wrappedOnNodeUpdate(editingId, patch, currentCanvasRef)
       }
       setEditingId(null)
     },
-    [editingId, onNodeUpdate, currentCanvasRef]
+    [editingId, wrappedOnNodeUpdate, currentCanvasRef]
   )
   const handleEditorCancel = useCallback(() => {
     setEditingId(null)
@@ -1111,11 +1398,11 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
   const handleEdgeEditorCommit = useCallback(
     (patch: EdgeUpdate) => {
       if (editingEdgeId) {
-        onEdgeUpdate?.(editingEdgeId, patch, currentCanvasRef)
+        wrappedOnEdgeUpdate(editingEdgeId, patch, currentCanvasRef)
       }
       setEditingEdgeId(null)
     },
-    [editingEdgeId, onEdgeUpdate, currentCanvasRef]
+    [editingEdgeId, wrappedOnEdgeUpdate, currentCanvasRef]
   )
   const handleEdgeEditorCancel = useCallback(() => {
     setEditingEdgeId(null)
@@ -1174,46 +1461,46 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
         undefined,
         theme
       )
-      onNodeAdd?.(node, currentCanvasRef)
+      wrappedOnNodeAdd(node, currentCanvasRef)
     },
-    [onNodeAdd, currentCanvasRef, theme]
+    [wrappedOnNodeAdd, currentCanvasRef, theme]
   )
 
-  // Keyboard: Delete/Backspace removes selected node/edge; Escape clears selection/editing
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLDivElement>) => {
-      if (!editable) return
-      if (e.key === 'Escape') {
-        setEditingId(null)
-        setSelectedId(null)
-        setEditingEdgeId(null)
-        setSelectedEdgeId(null)
-        return
-      }
-      if (editingId || editingEdgeId) return // let the editor own the keys
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (selectedId) {
-          e.preventDefault()
-          onNodeDelete?.(selectedId, currentCanvasRef)
-          setSelectedId(null)
-        } else if (selectedEdgeId) {
-          e.preventDefault()
-          onEdgeDelete?.(selectedEdgeId, currentCanvasRef)
-          setSelectedEdgeId(null)
-        }
-      }
-    },
-    [
-      editable,
-      editingId,
-      editingEdgeId,
-      selectedId,
-      selectedEdgeId,
-      onNodeDelete,
-      onEdgeDelete,
-      currentCanvasRef,
-    ]
-  )
+  // Keyboard shortcuts — delegated to the dedicated hook for maintainability.
+  const handleKeyDown = useKeyboardShortcuts({
+    editable,
+    editingId,
+    editingEdgeId,
+    selectedIds,
+    selectedEdgeId,
+    nodesRef,
+    edgesRef,
+    theme,
+    currentCanvasRef,
+    contextMenuState,
+    setContextMenuState,
+    wrappedOnNodeAdd,
+    wrappedOnEdgeAdd,
+    wrappedOnNodeUpdate,
+    wrappedOnNodesUpdate,
+    wrappedOnNodeDelete,
+    wrappedOnNodesDelete,
+    wrappedOnEdgeDelete,
+    onNodesUpdate,
+    onNodeUpdate,
+    beginBatch,
+    endBatch,
+    undo,
+    redo,
+    selectNode,
+    selectMultiple,
+    selectAll,
+    clearSelection,
+    setEditingId,
+    setEditingEdgeId,
+    setSelectedEdgeId,
+    cancelDrag,
+  })
 
   const renderProps: AddNodeButtonRenderProps = { options: menuOptions, addNode, theme }
 
@@ -1291,7 +1578,9 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
         onNodeContextMenu={handleNodeContextMenu}
         onEdgeContextMenu={handleEdgeContextMenu}
         onNodePointerDown={editable ? onNodePointerDown : undefined}
-        selectedId={editable ? selectedId : null}
+        selectedIds={editable ? selectedIds : undefined}
+        marqueeRect={editable ? marqueeRect : null}
+        marqueeActiveRef={editable ? marqueeActiveRef : undefined}
         editingId={editable ? editingId : null}
         selectedEdgeId={editable ? selectedEdgeId : null}
         editingEdgeId={editable ? editingEdgeId : null}
@@ -1308,6 +1597,9 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
           editable ? onConnectionHandlePointerDown : undefined
         }
         edgeCreateEnabled={editable}
+        alignmentGuides={editable ? alignmentGuides : undefined}
+        dimmedNodeIds={dimmedIds}
+        highlightedNodeIds={matchingIds}
       />
 
       {/* Sticky lane headers overlay (above the viewport SVG) */}
@@ -1323,17 +1615,17 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
         />
       )}
 
-      {/* Floating node toolbar (above the selected node, editable mode only) */}
-      {editable && showNodeToolbar && selectedResolvedNode && !editingId && (
+      {/* Floating node toolbar — single-node selection */}
+      {editable && showNodeToolbar && selectedIds.size === 1 && selectedResolvedNode && !editingId && (
         <NodeToolbar
           node={selectedResolvedNode}
           theme={theme}
           onPatch={(update) => {
-            onNodeUpdate?.(selectedResolvedNode.id, update, currentCanvasRef)
+            wrappedOnNodeUpdate(selectedResolvedNode.id, update, currentCanvasRef)
           }}
           onDelete={() => {
-            onNodeDelete?.(selectedResolvedNode.id, currentCanvasRef)
-            setSelectedId(null)
+            wrappedOnNodeDelete(selectedResolvedNode.id, currentCanvasRef)
+            clearSelection()
           }}
           getViewport={getViewportState}
           containerWidth={containerSize.width}
@@ -1341,6 +1633,37 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
           render={renderNodeToolbar}
         />
       )}
+
+      {/* Floating multi-select toolbar — 2+ nodes selected */}
+      {editable && showNodeToolbar && selectedIds.size > 1 && !editingId && (() => {
+        const selectedResolvedNodes = Array.from(selectedIds)
+          .map((id) => nodeMap.get(id))
+          .filter((n): n is ResolvedNode => n != null)
+        if (selectedResolvedNodes.length === 0) return null
+        const anchorNode = selectedResolvedNodes[0]
+        return (
+          <NodeToolbar
+            node={anchorNode}
+            selectedNodes={selectedResolvedNodes}
+            theme={theme}
+            onPatch={() => {}}
+            onMultiPatch={(patch) => {
+              for (const id of selectedIds) {
+                wrappedOnNodeUpdate(id, patch, currentCanvasRef)
+              }
+            }}
+            onDelete={() => {
+              wrappedOnNodesDelete(Array.from(selectedIds), currentCanvasRef)
+              clearSelection()
+            }}
+            getViewport={getViewportState}
+            containerWidth={containerSize.width}
+            containerHeight={containerSize.height}
+            onAlign={handleAlign}
+            onDistribute={handleDistribute}
+          />
+        )
+      })()}
 
       {/* Add-node FAB (editable only) */}
       {editable &&
@@ -1356,14 +1679,38 @@ export const SystemCanvas = forwardRef<SystemCanvasHandle, SystemCanvasProps>(
        * above every other library-managed overlay (toolbar, breadcrumbs,
        * lane headers).
        */}
-      {nodeContextMenu && (
+      {effectiveNodeContextMenu && (
         <NodeContextMenuOverlay
           state={contextMenuState}
-          config={nodeContextMenu}
+          config={effectiveNodeContextMenu}
           theme={theme}
           onClose={() => setContextMenuState(null)}
         />
       )}
+
+      {/* Search + category filter overlay — rendered last so it sits above all other overlays */}
+      <SearchOverlay
+        open={searchOpen}
+        query={searchQuery}
+        onQueryChange={setSearchQuery}
+        theme={theme}
+        hiddenCategories={hiddenCategories}
+        onToggleCategory={(cat) =>
+          setHiddenCategories((prev) => {
+            const next = new Set(prev)
+            next.has(cat) ? next.delete(cat) : next.add(cat)
+            return next
+          })
+        }
+        matchCount={matchingIds.size}
+        totalCount={nodes.length}
+        onClose={() => {
+          setSearchOpen(false)
+          setSearchQuery('')
+          setHiddenCategories(new Set())
+        }}
+        onPanToMatch={panToFirstMatch}
+      />
     </div>
   )
   }

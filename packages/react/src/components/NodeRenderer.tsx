@@ -21,7 +21,7 @@ interface NodeRendererProps {
   onContextMenu: (node: ResolvedNode, event: React.MouseEvent) => void
   onNavigate: (node: ResolvedNode, event: React.MouseEvent) => void
   onPointerDown?: (node: ResolvedNode, event: React.PointerEvent) => void
-  selectedId?: string | null
+  selectedIds?: Set<string> | null
   editingId?: string | null
   onResizeHandlePointerDown?: (
     node: ResolvedNode,
@@ -42,6 +42,10 @@ interface NodeRendererProps {
    * Callers can use this to interleave edges between groups and other nodes.
    */
   only?: 'groups' | 'non-groups'
+  /** Nodes that should render at low opacity (search/category filter). */
+  dimmedNodeIds?: Set<string>
+  /** Nodes that should render with a highlight ring (search match). */
+  highlightedNodeIds?: Set<string>
 }
 
 /**
@@ -64,11 +68,13 @@ export function NodeRenderer({
   onContextMenu,
   onNavigate,
   onPointerDown,
-  selectedId,
+  selectedIds,
   editingId,
   onResizeHandlePointerDown,
   canvases,
   only,
+  dimmedNodeIds,
+  highlightedNodeIds,
 }: NodeRendererProps) {
   const groups = nodes.filter((n) => n.type === 'group')
   const others = nodes.filter((n) => n.type !== 'group')
@@ -88,7 +94,7 @@ export function NodeRenderer({
       onContextMenu,
       onNavigate,
       onPointerDown,
-      isSelected: selectedId === node.id,
+      isSelected: selectedIds?.has(node.id) ?? false,
       isEditing: editingId === node.id,
       slots,
       canvases,
@@ -100,9 +106,13 @@ export function NodeRenderer({
     }
   }
 
+  // Resize handles only make sense for a single selected node.
+  // With multi-select (2+ nodes), resize is disabled.
+  const singleSelectedId =
+    selectedIds?.size === 1 ? Array.from(selectedIds)[0] : null
   const selectedNode =
-    selectedId && editingId !== selectedId
-      ? nodes.find((n) => n.id === selectedId)
+    singleSelectedId && editingId !== singleSelectedId
+      ? nodes.find((n) => n.id === singleSelectedId)
       : undefined
 
   // Resize handles belong on the topmost layer: only render them when we're
@@ -113,12 +123,54 @@ export function NodeRenderer({
   return (
     <>
       {only !== 'non-groups' &&
-        groups.map((node) => <GroupNode key={node.id} {...common(node)} />)}
+        groups.map((node) => {
+          const isDimmed = dimmedNodeIds?.has(node.id) ?? false
+          const isHighlighted = highlightedNodeIds?.has(node.id) ?? false
+          return (
+            <g key={node.id} opacity={isDimmed ? 0.15 : 1}>
+              {isHighlighted && (
+                <rect
+                  x={node.x - 4}
+                  y={node.y - 4}
+                  width={node.width + 8}
+                  height={node.height + 8}
+                  rx={6}
+                  fill="none"
+                  stroke={theme.node.labelColor}
+                  strokeWidth={2}
+                  opacity={0.6}
+                  pointerEvents="none"
+                />
+              )}
+              <GroupNode {...common(node)} />
+            </g>
+          )
+        })}
 
       {only !== 'groups' &&
         others.map((node) => {
           const Component = getNodeComponent(node.type)
-          return <Component key={node.id} {...common(node)} />
+          const isDimmed = dimmedNodeIds?.has(node.id) ?? false
+          const isHighlighted = highlightedNodeIds?.has(node.id) ?? false
+          return (
+            <g key={node.id} opacity={isDimmed ? 0.15 : 1}>
+              {isHighlighted && (
+                <rect
+                  x={node.x - 4}
+                  y={node.y - 4}
+                  width={node.width + 8}
+                  height={node.height + 8}
+                  rx={6}
+                  fill="none"
+                  stroke={theme.node.labelColor}
+                  strokeWidth={2}
+                  opacity={0.6}
+                  pointerEvents="none"
+                />
+              )}
+              <Component {...common(node)} />
+            </g>
+          )
         })}
 
       {renderResizeHandles && (

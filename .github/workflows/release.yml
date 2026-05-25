@@ -1,0 +1,127 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+# Only one release at a time; if a second push lands mid-publish, it queues.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    # Skip if the commit was made by the release bot itself (avoids infinite loop).
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    permissions:
+      id-token: write   # required for npm OIDC trusted publishing
+      contents: write   # required to push the version-bump commit back to main
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Use a PAT or the default GITHUB_TOKEN; default works for same-repo pushes.
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Setup Node
+        # Node 24 ships with npm >= 11.5 natively, no upgrade dance needed.
+        # We do NOT set registry-url here — that's what writes the broken
+        # _authToken line into ~/.npmrc and breaks OIDC. npm defaults to
+        # registry.npmjs.org anyway.
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Verify OIDC environment is available
+        run: |
+          if [ -z "$ACTIONS_ID_TOKEN_REQUEST_URL" ]; then
+            echo "::error::ACTIONS_ID_TOKEN_REQUEST_URL is not set."
+            exit 1
+          fi
+          echo "OIDC environment available. npm: $(npm --version), node: $(node --version)"
+
+      - name: Verify package versions are in lockstep with root
+        run: |
+          ROOT_VERSION=$(node -p "require('./package.json').version")
+          echo "Root version: $ROOT_VERSION"
+          FAIL=0
+          for pkg in packages/core packages/react packages/standalone; do
+            PKG_VERSION=$(node -p "require('./$pkg/package.json').version")
+            if [ "$PKG_VERSION" != "$ROOT_VERSION" ]; then
+              echo "::error file=$pkg/package.json::$pkg version ($PKG_VERSION) does not match root version ($ROOT_VERSION). Per-package version edits are not supported. See AGENTS.md > Versioning & releases."
+              FAIL=1
+            fi
+          done
+          if [ "$FAIL" = "1" ]; then
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Determine release version
+        id: version
+        run: |
+          # If this push changed the root package.json's version field (vs. the
+          # previous commit on main), honor it as an explicit release bump and
+          # skip the auto-patch. Otherwise auto-patch as usual.
+          ROOT_VERSION=$(node -p "require('./package.json').version")
+          PREV_VERSION=$(git show HEAD~1:package.json 2>/dev/null | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).version" 2>/dev/null || echo "$ROOT_VERSION")
+          if [ "$ROOT_VERSION" != "$PREV_VERSION" ]; then
+            echo "Root version changed from $PREV_VERSION to $ROOT_VERSION in this commit — honoring as explicit release."
+            echo "MODE=explicit" >> $GITHUB_OUTPUT
+            echo "NEW_VERSION=$ROOT_VERSION" >> $GITHUB_OUTPUT
+          else
+            echo "No explicit version change detected; auto-patching."
+            echo "MODE=auto-patch" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Bump patch version (auto-patch mode only)
+        if: steps.version.outputs.MODE == 'auto-patch'
+        run: npm version patch --no-git-tag-version
+
+      - name: Sync workspaces to root version
+        run: |
+          npm run sync-versions
+          NEW_VERSION=$(node -p "require('./package.json').version")
+          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+          # Only commit if there are changes (an explicit-mode release where the
+          # author already pre-synced workspaces will have a clean tree here).
+          if [ -n "$(git status --porcelain)" ]; then
+            git add -A
+            git commit -m "release: v$NEW_VERSION [skip ci]"
+          fi
+          git tag "v$NEW_VERSION"
+
+      - name: Build all packages
+        run: npm run build
+
+      # OIDC trusted publishing. No NODE_AUTH_TOKEN, no .npmrc. npm detects the
+      # GitHub Actions OIDC environment via ACTIONS_ID_TOKEN_REQUEST_URL +
+      # ACTIONS_ID_TOKEN_REQUEST_TOKEN (auto-injected by `id-token: write`),
+      # exchanges with npm's token endpoint, and publishes with provenance.
+      - name: Publish system-canvas
+        run: |
+          cd packages/core
+          npm publish --provenance --access public
+
+      - name: Publish system-canvas-react
+        run: |
+          cd packages/react
+          npm publish --provenance --access public
+
+      - name: Publish system-canvas-standalone
+        run: |
+          cd packages/standalone
+          npm publish --provenance --access public
+
+      - name: Push version bump + tag
+        run: git push --follow-tags origin main
