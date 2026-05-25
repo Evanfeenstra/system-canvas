@@ -427,6 +427,13 @@ export const gatewayTheme: CanvasTheme = resolveTheme(
 
       // ─── gateway ─────────────────────────────────────────────────
       // Singleton hub. Big purple card sitting in the middle.
+      //
+      // At fit-zoom the card reads as the central "Agent Gateway" hub
+      // with the swarm total in the footer. Zooming in past `threshold`
+      // fades in a 4-row trust-context panel BELOW the node so the
+      // operator can verify who's actually issuing tokens to this
+      // mothership without leaving the canvas. The panel is a category
+      // reveal — declared here, populated per-node via `customData`.
       gateway: {
         defaultWidth: 220,
         defaultHeight: 100,
@@ -447,6 +454,62 @@ export const gatewayTheme: CanvasTheme = resolveTheme(
             fontSize: 11,
             align: 'center',
             color: '#9ca3af',
+          },
+        },
+        reveals: {
+          below: {
+            kind: 'list',
+            // Fully opaque at zoom 1.6; starts fading in at 1.2.
+            threshold: 1.6,
+            fadeWindow: 0.4,
+            offset: 14,
+            // Pin the panel's left edge to the node's left edge so the
+            // shield icon lines up with the card's leading stroke
+            // instead of floating off to the side. Width matches the
+            // node (220) so the panel reads as a continuation of the
+            // card rather than a free-floating tooltip.
+            width: 220,
+            align: 'start',
+            alignValues: true,
+            // Quieter weights — these are reference details, not
+            // headline figures. Both label and value render at normal
+            // weight so the panel reads as a flat key/value dump.
+            valueWeight: 400,
+            labelWeight: 400,
+            rows: [
+              {
+                icon: 'shield',
+                label: 'Org',
+                value: (ctx) =>
+                  (ctx.node.customData?.trustedOrg as string) ?? null,
+              },
+              {
+                label: 'Pubkey',
+                // The lib renders the value verbatim; if a row needs
+                // a custom shape (here: middle-elided to 6+6 chars
+                // for a hex pubkey) we do the slicing right here in
+                // the accessor. The lib already clamps to the panel
+                // width as a safety net, so we never overflow.
+                value: (ctx) => {
+                  const pk = ctx.node.customData?.pubkey as string | undefined
+                  if (!pk) return null
+                  if (pk.length <= 14) return pk
+                  return `${pk.slice(0, 6)}…${pk.slice(-6)}`
+                },
+                mono: true,
+              },
+              {
+                label: 'Issuer',
+                value: (ctx) =>
+                  (ctx.node.customData?.issuerUrl as string) ?? null,
+              },
+              {
+                label: 'Realm',
+                value: (ctx) =>
+                  (ctx.node.customData?.realm as string) ?? null,
+                mono: true,
+              },
+            ],
           },
         },
       },
@@ -623,6 +686,12 @@ function buildGatewayCanvas(): CanvasData {
   })
 
   // Gateway singleton.
+  //
+  // `customData` here feeds two things: the existing footer slot reads
+  // `totalCost`, and the new zoom-gated reveal panel reads the trust-
+  // context fields (`trustedOrg`, `pubkey`, `issuerUrl`, `realm`). The
+  // reveal layout is declared once on the `gateway` category — values
+  // flow in per node from here.
   nodes.push({
     id: 'gateway',
     type: 'text',
@@ -632,7 +701,14 @@ function buildGatewayCanvas(): CanvasData {
     y: 0,
     width: SIZE.gateway.w,
     height: SIZE.gateway.h,
-    customData: { totalCost: swarmTotal },
+    customData: {
+      totalCost: swarmTotal,
+      trustedOrg: 'Sphinx Labs',
+      pubkey:
+        '1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b',
+      issuerUrl: 'auth.sphinx.chat',
+      realm: 'mothership-prod',
+    },
   })
 
   // Providers column.
